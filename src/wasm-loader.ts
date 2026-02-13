@@ -44,10 +44,44 @@ export async function initWasm(): Promise<void> {
 }
 
 /**
- * Generate proof using WASM module
+ * Generate proof using WASM module with decimal witness format (recommended)
  *
+ * This function accepts witness in snarkjs native format (decimal strings),
+ * eliminating the need for manual hex conversion.
+ *
+ * @param numPublicSignals - Number of public signals to extract
+ * @param witnessJson - JSON stringified witness array (decimal strings)
+ * @param provingKeyBytes - Binary proving key in arkworks format
+ * @returns Proof and public signals
+ */
+export async function generateProofFromDecimalWasm(
+  numPublicSignals: number,
+  witnessJson: string,
+  provingKeyBytes: Uint8Array
+): Promise<WasmProofOutput> {
+  if (!wasmModule) {
+    await initWasm();
+  }
+
+  try {
+    // Call WASM function: generate_proof_from_decimal_wasm(num_public_signals, witness_json, proving_key_bytes)
+    const resultJson = wasmModule.generate_proof_from_decimal_wasm(
+      numPublicSignals,
+      witnessJson,
+      provingKeyBytes
+    );
+    return JSON.parse(resultJson);
+  } catch (error) {
+    throw new Error(`WASM proof generation failed: ${(error as Error).message}`);
+  }
+}
+
+/**
+ * Generate proof using WASM module with hex LE witness format (legacy)
+ *
+ * @deprecated Use generateProofFromDecimalWasm() instead
  * @param circuitType - Type of circuit (unshield, transfer, or disclosure)
- * @param witnessJson - JSON stringified witness array
+ * @param witnessJson - JSON stringified witness array (hex LE strings)
  * @param provingKeyBytes - Binary proving key in arkworks format
  * @returns Proof and public signals
  */
