@@ -245,13 +245,16 @@ User Input (JSON)
     ↓
 [2] Load circuit WASM (witness calculator)
     ↓
-[3] snarkjs: Calculate witness (11,808 elements)
+[3] snarkjs: Calculate witness (decimal format)
+    ↓ [OPTIMIZED: No conversion needed!]
     ↓
 [4] Load proving key (arkworks format .ark)
     ↓
-[5] Load groth16_proofs WASM (proof generation)
+[5] Load groth16-proofs WASM (proof generation)
     ↓
-[6] arkworks: Generate 128-byte proof
+[6] groth16-proofs: Convert decimal → field elements
+    ↓
+[7] arkworks: Generate 128-byte proof
     ↓
 Output (proof + publicSignals)
 ```
@@ -260,12 +263,14 @@ Output (proof + publicSignals)
 
 - **snarkjs 0.7.5**: Witness calculation from Circom circuits
   - Consumes: circuit WASM, inputs
-  - Produces: witness array
+  - Produces: witness array (decimal strings - native format)
 - **groth16-proofs**: Groth16 proof generation (compiled WASM)
-  - Consumes: witness, proving key
+  - Consumes: witness (decimal), proving key
+  - Internally converts: decimal → field elements (LE)
   - Produces: 128-byte proof + public signals
 - **TypeScript wrapper**: Orchestrates the pipeline
   - Handles paths, validation, error handling
+  - No witness format conversion needed ✅
   - Same code everywhere
 
 ### Data Types
@@ -276,10 +281,10 @@ Output (proof + publicSignals)
 Record<string, string | number | bigint>;
 ```
 
-**Witness:**
+**Witness (Updated):**
 
 ```typescript
-string[]  // 11,808 elements (hex strings)
+string[]  // 11,808 elements (decimal strings: "1", "12345", etc.)
 ```
 
 **Proof Output:**
