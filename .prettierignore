@@ -1,0 +1,9 @@
+node_modules
+dist
+rust/target
+artifacts
+*.wasm
+*.zkey
+*.ark
+coverage
+.git
