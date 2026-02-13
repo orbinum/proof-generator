@@ -32,16 +32,17 @@ console.log('Signals:', result.publicSignals); // ['0x...', ...]
 ## Documentation
 
 - **[API Reference](docs/api.md)** - Complete API, error handling, configuration
+- **[Formatter Utilities](docs/formatters.md)** - Data format conversion helpers (decimal, hex, BigInt)
 - **[Development Guide](docs/development.md)** - Setup, testing, architecture details
 
 ## Features
 
 - ✅ **Fast**: ~8.5s end-to-end (500ms witness + 5-8s proof)
+- ✅ **Optimized**: Direct decimal format pipeline (no conversion overhead)
 - ✅ **Compact**: 128-byte proofs (50% smaller than snarkjs)
 - ✅ **Universal**: Node.js, browsers, Electron, Tauri - same code
 - ✅ **Simple**: No build tools, no Rust, no setup
 - ✅ **Type-Safe**: Full TypeScript types
-- ✅ **Tested**: 32+ passing tests
 
 ## Supported Circuits
 
