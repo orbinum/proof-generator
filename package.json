@@ -1,0 +1,74 @@
+{
+  "name": "@orbinum/proof-generator",
+  "version": "1.0.1",
+  "description": "ZK-SNARK proof generator for Orbinum. Combines snarkjs (witness) with arkworks WASM (proof generation) to produce 128-byte Groth16 proofs.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "scripts"
+  ],
+  "author": "Orbinum",
+  "license": "GPL-3.0-or-later OR Apache-2.0",
+  "repository": {
+    "url": "git+https://github.com/orbinum/proof-generator.git"
+  },
+  "scripts": {
+    "postinstall": "tsx scripts/download-artifacts.ts",
+    "build": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:verbose": "jest --verbose",
+    "test:shield": "jest shielded.test.ts",
+    "test:unshield": "jest unshield.test.ts",
+    "test:transfer": "jest transfer.test.ts",
+    "test:disclosure": "jest disclosure.test.ts",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
+    "lint": "tsc --noEmit",
+    "prepare": "husky",
+    "prepublishOnly": "npm run build && npm run lint && npm test",
+    "clean": "rm -rf dist circuits node_modules groth16-proof"
+  },
+  "keywords": [
+    "zksnark",
+    "groth16",
+    "circom",
+    "snarkjs",
+    "arkworks",
+    "privacy",
+    "zk-proof",
+    "orbinum"
+  ],
+  "dependencies": {
+    "snarkjs": "0.7.5",
+    "tar": "6.2.1",
+    "tsx": "4.21.0"
+  },
+  "devDependencies": {
+    "@types/circomlibjs": "0.1.6",
+    "@types/jest": "29.5.14",
+    "@types/node": "22.10.5",
+    "@types/snarkjs": "0.7.9",
+    "@types/tar": "6.1.13",
+    "circomlibjs": "0.1.7",
+    "husky": "9.1.7",
+    "jest": "29.7.0",
+    "ls-jest": "29.2.5",
+    "ts-jest": "29.2.5",
+    "tsx": "4.21.0",
+    "typescript": "5.7.3"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "prettier --write",
+      "tsc --noEmit"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
