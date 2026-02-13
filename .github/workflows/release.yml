@@ -62,7 +62,7 @@ jobs:
         if: steps.check_tag.outputs.is_tag == 'false'
         run: |
           npm version patch -m "chore: release %s"
-          npm publish
+          npm publish --access public
           git push --follow-tags
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

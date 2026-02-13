@@ -13,6 +13,9 @@
   "repository": {
     "url": "git+https://github.com/orbinum/proof-generator.git"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "postinstall": "tsx scripts/download-artifacts.ts",
     "build": "tsc",
