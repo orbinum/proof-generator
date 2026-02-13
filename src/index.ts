@@ -20,8 +20,8 @@ import {
 import { getCircuitConfig } from './circuits';
 import * as circuitsInternal from './circuits';
 import { calculateWitness } from './witness';
-import { validateInputs, validatePublicSignals, formatProofHex } from './utils';
-import { initWasm, generateProofWasm } from './wasm-loader';
+import { validateInputs, validatePublicSignals, formatProofHexForDisplay } from './utils';
+import { initWasm, generateProofFromDecimalWasm } from './wasm-loader';
 import { getCircuitProvingKeyPath } from './config';
 
 /**
@@ -130,8 +130,9 @@ export async function generateProof(
     const provingKeyPath = getCircuitProvingKeyPath(circuitType);
     const provingKeyBytes = await fs.readFile(provingKeyPath);
 
-    const output = await generateProofWasm(
-      circuitType.toLowerCase() as 'unshield' | 'transfer' | 'disclosure',
+    // Use new decimal format API (no conversion needed!)
+    const output = await generateProofFromDecimalWasm(
+      config.expectedPublicSignals,
       JSON.stringify(witnessData.witness),
       new Uint8Array(provingKeyBytes)
     );
@@ -142,7 +143,7 @@ export async function generateProof(
     };
 
     if (verbose) {
-      console.log(`   ✅ Proof generated: ${formatProofHex(proofResult.proof, 32)}`);
+      console.log(`   ✅ Proof generated: ${formatProofHexForDisplay(proofResult.proof, 32)}`);
       console.log(`   ✅ Public signals: ${proofResult.publicSignals.length}`);
     }
   } catch (error) {
