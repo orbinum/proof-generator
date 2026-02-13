@@ -6,10 +6,6 @@ on:
       - main
     tags:
       - "v*"
-    paths:
-      - "package.json"
-      - "src/**"
-      - ".github/workflows/release.yml"
 
 permissions:
   contents: write
