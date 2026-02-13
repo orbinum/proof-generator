@@ -3,60 +3,167 @@
  */
 
 import {
-  bigIntToHexLE,
-  witnessToHexLE,
   validateInputs,
   validateProofSize,
   validatePublicSignals,
-  hexToBytes,
-  bytesToHex,
+  formatInputValue,
+  formatInputArray,
+  formatCircuitInputs,
+  formatWitness,
+  formatProofToHex,
+  parseProofHex,
+  normalizeProofHex,
+  formatProofHexForDisplay,
 } from '../src/utils';
 
 describe('Utils', () => {
-  describe('bigIntToHexLE', () => {
-    it('should convert bigint to hex little-endian', () => {
-      const value = BigInt(1);
-      const hex = bigIntToHexLE(value);
-
-      expect(hex).toMatch(/^0x[0-9a-f]{64}$/);
-      expect(hex).toBe('0x0100000000000000000000000000000000000000000000000000000000000000');
+  describe('formatInputValue', () => {
+    it('should convert number to string', () => {
+      expect(formatInputValue(100)).toBe('100');
+      expect(formatInputValue(0)).toBe('0');
+      expect(formatInputValue(256)).toBe('256');
     });
 
-    it('should handle large numbers', () => {
-      const value = BigInt('123456789012345678901234567890');
-      const hex = bigIntToHexLE(value);
-
-      expect(hex).toMatch(/^0x[0-9a-f]{64}$/);
-      // Verify always 32 bytes (64 hex chars + 0x)
-      expect(hex.length).toBe(66);
+    it('should convert bigint to string', () => {
+      expect(formatInputValue(BigInt(100))).toBe('100');
+      expect(formatInputValue(BigInt('123456789012345678901234567890'))).toBe(
+        '123456789012345678901234567890'
+      );
     });
 
-    it('should handle zero', () => {
-      const value = BigInt(0);
-      const hex = bigIntToHexLE(value);
-
-      expect(hex).toBe('0x' + '0'.repeat(64));
+    it('should pass through decimal strings', () => {
+      expect(formatInputValue('100')).toBe('100');
+      expect(formatInputValue('0')).toBe('0');
     });
 
-    it('should maintain correct byte order (little-endian)', () => {
-      // 256 in little-endian is 0x0001... (256 = 0x100)
-      const value = BigInt(256);
-      const hex = bigIntToHexLE(value);
-
-      // In LE: first byte is 0x00, second is 0x01
-      expect(hex.substring(0, 6)).toBe('0x0001');
+    it('should convert hex strings to decimal', () => {
+      expect(formatInputValue('0x64')).toBe('100');
+      expect(formatInputValue('0x100')).toBe('256');
+      expect(formatInputValue('0x0')).toBe('0');
     });
   });
 
-  describe('witnessToHexLE', () => {
-    it('should convert witness array to hex LE', () => {
-      const witness = [BigInt(1), BigInt(2), BigInt(3)];
-      const hexArray = witnessToHexLE(witness);
+  describe('formatInputArray', () => {
+    it('should convert array of values', () => {
+      expect(formatInputArray([1, 2, 3])).toEqual(['1', '2', '3']);
+      expect(formatInputArray([BigInt(100), BigInt(200)])).toEqual(['100', '200']);
+      expect(formatInputArray(['0x64', '0xc8'])).toEqual(['100', '200']);
+    });
+  });
 
-      expect(hexArray).toHaveLength(3);
-      hexArray.forEach(hex => {
-        expect(hex).toMatch(/^0x[0-9a-f]{64}$/);
+  describe('formatCircuitInputs', () => {
+    it('should format circuit inputs', () => {
+      const inputs = {
+        amount: 100,
+        nullifier: 0x123,
+        pathElements: [1, 2, 3],
+      };
+      const formatted = formatCircuitInputs(inputs);
+
+      expect(formatted).toEqual({
+        amount: '100',
+        nullifier: '291',
+        pathElements: ['1', '2', '3'],
       });
+    });
+  });
+
+  describe('formatWitness', () => {
+    it('should convert bigint array to decimal strings', () => {
+      const witness = [BigInt(1), BigInt(2), BigInt(3)];
+      const formatted = formatWitness(witness);
+
+      expect(formatted).toEqual(['1', '2', '3']);
+    });
+
+    it('should convert number array to decimal strings', () => {
+      const witness = [1, 2, 3];
+      const formatted = formatWitness(witness);
+
+      expect(formatted).toEqual(['1', '2', '3']);
+    });
+
+    it('should pass through decimal string array', () => {
+      const witness = ['1', '2', '3'];
+      const formatted = formatWitness(witness);
+
+      expect(formatted).toEqual(['1', '2', '3']);
+    });
+
+    it('should convert hex strings to decimal', () => {
+      const witness = ['0x01', '0x02', '0x03'];
+      const formatted = formatWitness(witness);
+
+      expect(formatted).toEqual(['1', '2', '3']);
+    });
+  });
+
+  describe('formatProofToHex', () => {
+    it('should convert proof bytes to hex', () => {
+      const bytes = new Uint8Array(128);
+      bytes[0] = 0xab;
+      bytes[1] = 0xcd;
+
+      const hex = formatProofToHex(bytes);
+
+      expect(hex).toMatch(/^0x[0-9a-f]{256}$/);
+      expect(hex.substring(0, 6)).toBe('0xabcd');
+    });
+
+    it('should reject invalid proof size', () => {
+      const bytes = new Uint8Array(64);
+
+      expect(() => formatProofToHex(bytes)).toThrow(/Invalid proof size/);
+    });
+  });
+
+  describe('parseProofHex', () => {
+    it('should parse valid proof hex', () => {
+      const hex = '0x' + '00'.repeat(128);
+      const bytes = parseProofHex(hex);
+
+      expect(bytes.length).toBe(128);
+      expect(bytes[0]).toBe(0);
+    });
+
+    it('should reject invalid hex length', () => {
+      const hex = '0x' + '00'.repeat(64);
+
+      expect(() => parseProofHex(hex)).toThrow(/Invalid proof hex length/);
+    });
+  });
+
+  describe('normalizeProofHex', () => {
+    it('should add 0x prefix', () => {
+      const hex = 'ABCD' + '00'.repeat(126);
+      const normalized = normalizeProofHex(hex);
+
+      expect(normalized).toMatch(/^0x[0-9a-f]{256}$/);
+      expect(normalized.substring(0, 6)).toBe('0xabcd');
+    });
+
+    it('should lowercase hex', () => {
+      const hex = '0xABCD' + '00'.repeat(126);
+      const normalized = normalizeProofHex(hex);
+
+      expect(normalized.substring(0, 6)).toBe('0xabcd');
+    });
+  });
+
+  describe('formatProofHexForDisplay', () => {
+    it('should truncate long hex', () => {
+      const hex = '0x' + 'ab'.repeat(128);
+      const display = formatProofHexForDisplay(hex, 20);
+
+      expect(display.length).toBeLessThan(hex.length);
+      expect(display).toContain('...');
+    });
+
+    it('should not truncate short hex', () => {
+      const hex = '0xabcd';
+      const display = formatProofHexForDisplay(hex, 20);
+
+      expect(display).toBe(hex);
     });
   });
 
@@ -90,30 +197,6 @@ describe('Utils', () => {
     });
   });
 
-  describe('hexToBytes / bytesToHex', () => {
-    it('should convert hex to bytes', () => {
-      const hex = '0x0102030405';
-      const bytes = hexToBytes(hex);
-
-      expect(bytes).toEqual(new Uint8Array([1, 2, 3, 4, 5]));
-    });
-
-    it('should convert bytes to hex', () => {
-      const bytes = new Uint8Array([1, 2, 3, 4, 5]);
-      const hex = bytesToHex(bytes);
-
-      expect(hex).toBe('0x0102030405');
-    });
-
-    it('should roundtrip correctly', () => {
-      const original = '0xabcdef1234567890';
-      const bytes = hexToBytes(original);
-      const result = bytesToHex(bytes);
-
-      expect(result.toLowerCase()).toBe(original.toLowerCase());
-    });
-  });
-
   describe('validateProofSize', () => {
     it('should accept 128-byte proof', () => {
       const proof = '0x' + '00'.repeat(128);
@@ -128,21 +211,21 @@ describe('Utils', () => {
     it('should reject 64-byte proof', () => {
       const proof = '0x' + '00'.repeat(64);
       expect(() => validateProofSize(proof)).toThrow(
-        /Invalid proof size.*expected 128 bytes.*got 64 bytes/
+        /Invalid proof size.*expected 256 hex chars.*got 128 chars/
       );
     });
 
     it('should reject 256-byte proof (uncompressed)', () => {
       const proof = '0x' + '00'.repeat(256);
       expect(() => validateProofSize(proof)).toThrow(
-        /Invalid proof size.*expected 128 bytes.*got 256 bytes/
+        /Invalid proof size.*expected 256 hex chars.*got 512 chars/
       );
     });
 
     it('should reject empty proof', () => {
       const proof = '0x';
       expect(() => validateProofSize(proof)).toThrow(
-        /Invalid proof size.*expected 128 bytes.*got 0 bytes/
+        /Invalid proof size.*expected 256 hex chars.*got 0 chars/
       );
     });
   });
