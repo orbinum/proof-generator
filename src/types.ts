@@ -34,9 +34,9 @@ export interface CircuitConfig {
   expectedPublicSignals: number;
 }
 
-/** Witness data (hex-encoded field elements) */
+/** Witness data (decimal strings from snarkjs) */
 export interface WitnessData {
-  /** Array of hex-encoded witness elements (little-endian) */
+  /** Array of witness elements as decimal strings (snarkjs native format) */
   witness: string[];
 }
 
