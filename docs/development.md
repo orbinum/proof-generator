@@ -31,26 +31,21 @@ npm test
 proof-generator/
 ├── src/
 │   ├── index.ts              Main API export point
-│   ├── config.ts             Centralized path configuration
-│   ├── wasm-loader.ts        Unified WASM module initialization
-│   ├── witness.ts            snarkjs integration (witness generation)
-│   ├── circuits.ts           Circuit metadata and validation
+│   ├── wasm-loader.ts        WASM module initialization (arkworks)
+│   ├── witness.ts            snarkjs integration (witness calculation)
+│   ├── circuits.ts           Circuit configuration and validation
 │   ├── types.ts              TypeScript type definitions
-│   ├── utils.ts              Shared utilities
-│   └── proof-generator.ts    Deprecated
-│
-├── scripts/
-│   ├── download-artifacts.ts Download orchestrator (circuits + WASM)
-│   ├── download-circuits.ts  Fetch from orbinum/circuits releases
-│   ├── download-wasm.ts      Fetch from orbinum/groth16-proofs releases
-│   └── utils.ts              GitHub API utilities
+│   └── utils.ts              Validation and formatting utilities
 │
 ├── tests/
-│   ├── unshield.test.ts      Unshield circuit tests
-│   ├── transfer.test.ts      Transfer circuit tests (if exists)
-│   ├── disclosure.test.ts    Disclosure circuit tests (if exists)
-│   ├── utils.test.ts         Utility function tests
-│   └── wasm-build.test.ts    WASM module integration tests
+│   ├── unit/                 Unit tests (55 tests)
+│   │   ├── circuits.test.ts  Circuit configuration tests (13 tests)
+│   │   ├── index.test.ts     API exports and error types (18 tests)
+│   │   └── utils.test.ts     Utility functions tests (24 tests)
+│   └── integration/          Integration tests (9 tests)
+│       ├── unshield.test.ts  Unshield proof generation (4 tests)
+│       ├── transfer.test.ts  Transfer proof generation (4 tests)
+│       └── disclosure.test.ts Disclosure proof generation (4 tests)
 │
 ├── docs/
 │   ├── api.md                Complete API reference
@@ -62,8 +57,8 @@ proof-generator/
 ├── .husky/                   Pre-commit hook configuration
 ├── dist/                     Compiled JavaScript (build output)
 ├── node_modules/
-│   ├── circuits/             Auto-downloaded Circom compiled WASM
-│   └── groth16-proof/        Auto-downloaded arkworks WASM
+│   ├── @orbinum/circuits/    Circuit artifacts (npm package)
+│   └── @orbinum/groth16-proofs/ Proof generation WASM (npm package)
 │
 ├── jest.config.js            Jest test configuration
 ├── tsconfig.json             TypeScript configuration
@@ -161,31 +156,6 @@ git commit --no-verify
 
 ## Key Source Files
 
-### `src/config.ts`
-
-Centralized configuration for artifact paths and module names.
-
-```typescript
-export const PATHS = {
-  WASM_MODULE_DIR: '../groth16-proof', // Directory
-  WASM_MODULE_NAME: 'groth16_proofs', // Module name
-  WASM_BG_FILE: 'groth16_proofs_bg.wasm', // WASM binary
-  CIRCUITS_BASE: '../circuits', // Circuits base
-};
-
-export function getWasmBgPath(): string {
-  /* ... */
-}
-export function getCircuitWasmPath(circuit: string): string {
-  /* ... */
-}
-export function getCircuitProvingKeyPath(circuit: string): string {
-  /* ... */
-}
-```
-
-**Usage:** Import to get artifact paths globally.
-
 ### `src/wasm-loader.ts`
 
 Manages WASM module initialization (lazy loading).
@@ -193,20 +163,21 @@ Manages WASM module initialization (lazy loading).
 ```typescript
 export async function initWasm(): Promise<void> {
   // Idempotent: Only initializes once
-  // Dynamically imports WASM module
+  // Dynamically imports WASM module from @orbinum/groth16-proofs
   // Works identically in Node.js and browsers
 }
 
-export async function generateProofWasm(input: Float64Array, pk: Uint8Array): Promise<Uint8Array> {
-  // Low-level proof generation
+export async function compressSnarkjsProofWasm(proof: SnarkjsProofLike): Promise<string> {
+  // Compress snarkjs proof to arkworks 128-byte format
 }
 ```
 
 **Key Design:**
 
 - Lazy initialization (on first use)
-- Unified code path (no environment checks)
-- Dynamic imports work everywhere
+- Universal environment support (Node.js, Browser, Electron, Tauri)
+- Dynamic imports with environment-specific initialization
+- Auto-initialization on first proof compression call
 
 ### `src/witness.ts`
 
@@ -227,7 +198,12 @@ export async function calculateWitness(
 Main public API.
 
 ```typescript
-export { generateProof } from './proof-generator';
+export async function generateProof(
+  circuitType: CircuitType,
+  inputs: CircuitInputs,
+  options?: GenerateProofOptions
+): Promise<ProofResult>;
+
 export { calculateWitness } from './witness';
 export { isReady } from './utils';
 export { CircuitType } from './types';
@@ -298,70 +274,107 @@ string[]  // 11,808 elements (decimal strings: "1", "12345", etc.)
 
 ## Artifact Management
 
-### Circuits
+### npm Package Dependencies
 
-Downloaded from [orbinum/circuits releases](https://github.com/orbinum/circuits/releases):
+**Circuit artifacts are managed via npm packages:**
 
-```
-circuits/
-├── unshield.wasm        (witness calculator)
-├── unshield_pk.ark      (proving key)
-├── transfer.wasm
-├── transfer_pk.ark
-├── disclosure.wasm
-└── disclosure_pk.ark
-```
+1. **@orbinum/circuits** (v0.3.0+)
 
-**Download command:**
+   - Circuit WASM files (witness calculators)
+   - Proving keys (.ark format for arkworks)
+   - Verification keys (.zkey format for snarkjs)
+   - Installed automatically as dependency
 
-```bash
-node scripts/download-circuits.ts
-```
+2. **@orbinum/groth16-proofs** (v2.0.0+)
+   - Precompiled WASM module (arkworks Groth16)
+   - Proof generation and compression
+   - Installed automatically as dependency
 
-### WASM Module
+**No manual downloads or postinstall scripts required!**
 
-Downloaded from [orbinum/groth16-proofs releases](https://github.com/orbinum/groth16-proofs):
+### Artifact Locations
+
+After `npm install`, artifacts are in `node_modules/`:
 
 ```
-groth16-proof/
-├── groth16_proofs_bg.wasm   (proof generation)
-├── groth16_proofs.js         (module wrapper)
-└── groth16_proofs.d.ts       (TypeScript types)
-```
-
-**Download command:**
-
-```bash
-node scripts/download-wasm.ts
+node_modules/
+├── @orbinum/circuits/
+│   ├── unshield.wasm
+│   ├── unshield_pk.ark
+│   ├── unshield_pk.zkey
+│   ├── transfer.wasm
+│   ├── transfer_pk.ark
+│   ├── transfer_pk.zkey
+│   ├── disclosure.wasm
+│   ├── disclosure_pk.ark
+│   └── disclosure_pk.zkey
+└── @orbinum/groth16-proofs/
+    ├── groth16_proofs_bg.wasm
+    ├── groth16_proofs.js
+    └── groth16_proofs.d.ts
 ```
 
 ### Version Management
 
-**Postinstall hook** (in `package.json`):
+Update versions in `package.json`:
 
 ```json
-"postinstall": "node scripts/download-artifacts.ts"
+{
+  "dependencies": {
+    "@orbinum/circuits": "^0.3.0",
+    "@orbinum/groth16-proofs": "^2.0.0"
+  }
+}
 ```
 
-Automatically runs during `npm install` to fetch latest artifacts.
-
-**Manual override:**
+Then:
 
 ```bash
-export CIRCUITS_VERSION=v0.2.0
-export WASM_VERSION=v0.1.0
+npm update
 npm install
 ```
 
 ## Testing Strategy
 
+### Test Organization
+
+**Two-tier test structure:**
+
+1. **Unit Tests** (`tests/unit/`): Fast, isolated component testing
+
+   - `circuits.test.ts` (13 tests): Circuit configuration resolution
+   - `index.test.ts` (18 tests): API exports, error types, isReady()
+   - `utils.test.ts` (24 tests): Validation and formatting utilities
+
+2. **Integration Tests** (`tests/integration/`): End-to-end proof generation
+   - `unshield.test.ts` (4 tests): Complete unshield proof flow
+   - `transfer.test.ts` (4 tests): Complete transfer proof flow
+   - `disclosure.test.ts` (4 tests): Complete disclosure proof flow
+
+**Total: 64 tests (55 unit + 9 integration)**
+
 ### Test Structure
 
+**Unit Test Example:**
+
 ```typescript
-describe('Unshield Circuit', () => {
+describe('circuits.ts - Unit Tests', () => {
+  test('should resolve circuit config from package', () => {
+    const config = getCircuitConfig(CircuitType.Unshield);
+    expect(config.wasmPath).toContain('unshield.wasm');
+    expect(config.zkeyPath).toContain('unshield_pk.zkey');
+  });
+});
+```
+
+**Integration Test Example:**
+
+```typescript
+describe('Integration: Unshield Proof Generation', () => {
   test('should generate valid proof for unshield', async () => {
     const result = await generateProof(CircuitType.Unshield, inputs);
     expect(result.proof).toBeDefined();
+    expect(result.proof.length).toBe(258); // 0x + 256 hex chars
     expect(result.publicSignals.length).toBe(5);
   });
 });
@@ -369,17 +382,38 @@ describe('Unshield Circuit', () => {
 
 ### Test Coverage
 
+**Unit Tests:**
+
+- ✅ Circuit artifact path resolution
+- ✅ Configuration validation
+- ✅ Public API exports
+- ✅ Error class instantiation
+- ✅ Utility function behavior
+- ✅ Input validation and formatting
+
+**Integration Tests:**
+
 - ✅ Valid proof generation for all 3 circuits
 - ✅ Invalid input handling
-- ✅ Artifact verification
-- ✅ WASM module integration
-- ✅ Output format validation
-- ✅ Error type handling
+- ✅ Missing required fields detection
+- ✅ Null/undefined input rejection
+- ✅ Real WASM module integration
+- ✅ Real circuit artifacts usage
 
 **Run tests:**
 
 ```bash
+# All tests
 npm test
+
+# Unit tests only
+npm test -- tests/unit
+
+# Integration tests only
+npm test -- tests/integration
+
+# Specific test file
+npm test -- tests/unit/circuits.test.ts
 ```
 
 ## Dependencies
@@ -430,10 +464,12 @@ Automatically publishes to npm.
 
 ### Add new circuit support
 
-1. Add circuit type to `src/types.ts`
-2. Add circuit metadata to `src/circuits.ts`
-3. Add test file `tests/{circuit}.test.ts`
-4. Ensure artifacts are downloaded (circuit WASM + proving key)
+1. Add circuit type to `src/types.ts` (CircuitType enum)
+2. Update `getExpectedPublicSignals()` in `src/circuits.ts`
+3. Add unit tests in `tests/unit/`
+4. Add integration test in `tests/integration/{circuit}.test.ts`
+5. Ensure @orbinum/circuits package includes new circuit artifacts
+6. Update documentation in `docs/api.md`
 
 ### Update dependencies
 
