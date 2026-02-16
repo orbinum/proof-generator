@@ -8,19 +8,19 @@ Complete API documentation for `@orbinum/proof-generator`.
 npm install @orbinum/proof-generator
 ```
 
-Automatically downloads during installation:
+**Dependencies installed automatically:**
 
-- Circuit WASM modules (witness calculators)
-- Proving keys (arkworks format)
-- Groth16 proof generation WASM
+- `@orbinum/circuits` - Circuit artifacts (WASM, proving keys)
+- `@orbinum/groth16-proofs` - Arkworks WASM proof generator
+- `snarkjs` - Witness calculation
 
 ### Requirements
 
 - **Node.js**: ≥ 22.0.0
 - **RAM**: ≥ 2GB (for proof generation)
-- **Storage**: ~100MB (circuits + WASM artifacts)
+- **Storage**: ~50MB (circuit artifacts)
 
-**No build tools required** - WASM is pre-compiled.
+**No build tools or manual downloads required.**
 
 ## Quick Start
 
@@ -93,7 +93,9 @@ console.log(result.publicSignals);
 
 ### `calculateWitness(inputs, wasmPath)`
 
-Calculate witness array separately (usually internal, advanced use).
+**Advanced use only.** Calculate witness array separately from proof generation.
+
+Most users should use `generateProof()` instead, which handles witness calculation internally.
 
 **Parameters:**
 
@@ -107,36 +109,40 @@ const witness = await calculateWitness(
 **Returns:**
 
 ```typescript
-string[]  // Witness array (11,808 elements for Orbinum circuits)
+string[]  // Witness array (decimal strings)
 ```
 
 **Example:**
 
 ```typescript
 import { calculateWitness } from '@orbinum/proof-generator';
+import { getCircuitConfig, CircuitType } from '@orbinum/proof-generator';
 
+const config = getCircuitConfig(CircuitType.Unshield);
 const witness = await calculateWitness(
-  { merkle_root: '0x...', nullifier: '0x...' },
-  'circuits/unshield.wasm'
+  { merkle_root: '0x...', nullifier: '0x...' /* ... */ },
+  config.wasmPath
 );
 ```
 
 ### `isReady()`
 
-Check if all artifacts (WASM + circuits) are available.
+Check if circuit artifacts are available for proof generation.
 
-**Returns:** `boolean`
+**Returns:** `boolean` - `true` if artifacts exist, `false` otherwise
 
 **Example:**
 
 ```typescript
 import { isReady } from '@orbinum/proof-generator';
 
-if (isReady()) {
-  console.log('Safe to generate proofs');
-} else {
-  console.log('Run npm install to download artifacts');
+if (!isReady()) {
+  console.error('Circuit artifacts missing. Run: npm install');
+  process.exit(1);
 }
+
+// Safe to generate proofs
+await generateProof(CircuitType.Unshield, inputs);
 ```
 
 ## Enumerations
@@ -170,16 +176,14 @@ await generateProof(CircuitType.Disclosure, inputs);
 ```typescript
 import {
   CircuitNotFoundError,
-  WitnessCalculationError,
   ProofGenerationError,
   InvalidInputsError,
-  ArtifactNotFoundError,
 } from '@orbinum/proof-generator';
 ```
 
 ### `InvalidInputsError`
 
-Thrown when circuit inputs are invalid (missing fields, wrong types).
+Thrown when circuit inputs are invalid (missing required fields, null values, wrong types).
 
 ```typescript
 try {
@@ -188,42 +192,28 @@ try {
   });
 } catch (error) {
   if (error instanceof InvalidInputsError) {
-    console.error('Missing or invalid inputs:', error.message);
+    console.error('Invalid inputs:', error.message);
   }
 }
 ```
 
 ### `CircuitNotFoundError`
 
-Thrown when circuit WASM file is missing.
+Thrown when circuit artifacts are missing (WASM file not found).
 
 ```typescript
 try {
   await generateProof(CircuitType.Unshield, inputs);
 } catch (error) {
   if (error instanceof CircuitNotFoundError) {
-    console.error('Circuit not found. Run: npm install');
-  }
-}
-```
-
-### `WitnessCalculationError`
-
-Thrown during witness generation (snarkjs step).
-
-```typescript
-try {
-  await generateProof(CircuitType.Unshield, inputs);
-} catch (error) {
-  if (error instanceof WitnessCalculationError) {
-    console.error('Witness generation failed:', error.message);
+    console.error('Circuit artifacts missing. Run: npm install');
   }
 }
 ```
 
 ### `ProofGenerationError`
 
-Thrown during proof generation (WASM step).
+Thrown during proof generation (witness calculation or WASM proof generation).
 
 ```typescript
 try {
@@ -235,56 +225,13 @@ try {
 }
 ```
 
-### `ArtifactNotFoundError`
-
-Thrown when WASM or proving key files are missing.
-
-```typescript
-try {
-  await generateProof(CircuitType.Unshield, inputs, {
-    validateArtifacts: true, // Enabled by default
-  });
-} catch (error) {
-  if (error instanceof ArtifactNotFoundError) {
-    console.error('Missing artifacts. Run: npm install');
-  }
-}
-```
-
-## Configuration
-
-### Environment Variables
-
-```bash
-# Specify circuits version (default: latest)
-export CIRCUITS_VERSION=v0.2.0
-npm install
-
-# Specify WASM version (default: latest)
-export WASM_VERSION=v0.1.0
-npm install
-```
-
-### Custom Paths
-
-Modify `src/config.ts` to use custom artifact locations:
-
-```typescript
-export const PATHS = {
-  WASM_MODULE_DIR: '../groth16-proof', // Directory containing WASM
-  WASM_MODULE_NAME: 'groth16_proofs', // Module name (no suffix)
-  WASM_BG_FILE: 'groth16_proofs_bg.wasm', // WASM binary filename
-  CIRCUITS_BASE: '../circuits', // Circuits base directory
-};
-```
-
 ## Supported Circuits
 
-| Circuit        | Public Signals | Inputs                                                                           | Use Case                             |
-| -------------- | -------------- | -------------------------------------------------------------------------------- | ------------------------------------ |
-| **Unshield**   | 5              | `merkle_root`, `nullifier`, `amount`, `secret`, `path_elements`, `path_index`    | Withdraw from pool to public address |
-| **Transfer**   | 5              | `merkle_root`, `nullifier_input`, `amount`, `secret`, `path_*`, `recipient_hash` | Private-to-private transfer          |
-| **Disclosure** | 4              | `merkle_root`, `nullifier`, `amount`, `secret`                                   | Selective revelation                 |
+| Circuit        | Public Signals | Key Inputs                                                                           | Use Case                             |
+| -------------- | -------------- | ------------------------------------------------------------------------------------ | ------------------------------------ |
+| **Unshield**   | 5              | `merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, note fields, `path_*` | Withdraw from pool to public address |
+| **Transfer**   | 5              | `merkle_root`, input/output nullifiers and commitments, note fields, `path_*`        | Private-to-private transfer          |
+| **Disclosure** | 4              | `commitment`, `viewing_key`, revealed fields, disclosure masks, note fields          | Selective revelation                 |
 
 ### Output Format
 
@@ -321,13 +268,13 @@ All public signals returned as **0x-prefixed hex strings**:
 
 ## Troubleshooting
 
-### "Cannot find module 'groth16_proofs'"
+### "Cannot find module '@orbinum/circuits'"
 
-Artifacts not downloaded:
+Dependency not installed:
 
 ```bash
+rm -rf node_modules package-lock.json
 npm install
-node scripts/download-artifacts.js
 ```
 
 ### "Out of memory" error
@@ -373,32 +320,44 @@ module.exports = nextConfig;
 
 ### Circuit inputs validation fails
 
-Check that all required fields are present and properly formatted:
+Ensure all required fields are present and properly formatted:
 
 ```typescript
-// ✅ Correct format
+// ✅ Correct - string values
 const inputs = {
   merkle_root: '0x123abc...',
   nullifier: '0x456def...',
-  amount: '1000000000000000000', // As string
-  secret: '0x789012...',
+  amount: '1000000000000000000', // String (18 decimals)
+  // ... other required fields
 };
 
-// ✅ Also valid
+// ✅ Also valid - BigInt values
 const inputs = {
-  merkle_root: 123456n, // BigInt
+  merkle_root: 123456n,
   nullifier: 456789n,
   amount: 1000000000000000000n,
-  secret: 789012n,
 };
 
-// ❌ Avoid
+// ❌ Avoid - number can lose precision
 const inputs = {
-  merkle_root: 0x123abc, // Not prefixed string
-  amount: 1000000000000000000, // Number (precision loss)
+  amount: 1000000000000000000, // May lose precision
 };
 ```
 
+### Performance issues
+
+Proof generation is compute-intensive. Expected times:
+
+- **Unshield**: ~1.5s
+- **Transfer**: ~3s
+- **Disclosure**: ~0.8s
+
+For faster proofs, ensure:
+
+- Node.js ≥ 22.0.0 (latest V8 optimizations)
+- Sufficient RAM (≥ 2GB available)
+- No CPU throttling
+
 ---
 
-See [Supported Circuits](#supported-circuits) for detailed input requirements per circuit.
+**See [docs/development.md](development.md) for development setup and architecture details.**
