@@ -3,13 +3,14 @@
  *
  * Provides a unified interface for proof generation using arkworks WASM module.
  * Works identically in Node.js, browsers, Electron, and Tauri.
+ *
+ * Uses @orbinum/groth16-proofs package from npm.
  */
 
-import { getWasmModuleName } from './config';
-
-interface WasmProofOutput {
-  proof: string;
-  publicSignals: string[];
+interface SnarkjsProofLike {
+  pi_a: Array<string | number>;
+  pi_b: Array<Array<string | number>>;
+  pi_c: Array<string | number>;
 }
 
 let wasmModule: any = null;
@@ -23,16 +24,35 @@ export async function initWasm(): Promise<void> {
   }
 
   try {
-    // Dynamic import: works in Node.js and browsers uniformly
-    // The WASM module is pre-compiled and downloaded during `npm install`
-    const moduleName = getWasmModuleName();
-    // @ts-ignore - WASM module is dynamically generated
-    const wasm = await import(`../groth16-proof/${moduleName}`);
+    // Import @orbinum/groth16-proofs from npm
+    const wasm = await import('@orbinum/groth16-proofs');
 
-    // Initialize WASM and panic hooks
-    if (typeof wasm.default === 'function') {
-      await wasm.default();
+    // Initialize WASM
+    // For Node.js: Load manually from node_modules
+    if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+      const fs = await import('fs');
+      const path = await import('path');
+
+      // Resolve path to WASM file in node_modules
+      const wasmModulePath = require.resolve('@orbinum/groth16-proofs');
+      const wasmDir = path.dirname(wasmModulePath);
+      const wasmPath = path.join(wasmDir, 'groth16_proofs_bg.wasm');
+
+      const wasmBuffer = fs.readFileSync(wasmPath);
+
+      if (typeof wasm.initSync === 'function') {
+        wasm.initSync({ module: wasmBuffer });
+      } else if (typeof wasm.default === 'function') {
+        await wasm.default({ module: wasmBuffer });
+      }
+    } else {
+      // For browsers: Use default() which handles fetch automatically
+      if (typeof wasm.default === 'function') {
+        await wasm.default();
+      }
     }
+
+    // Initialize panic hook for better error messages
     if (typeof wasm.init_panic_hook === 'function') {
       wasm.init_panic_hook();
     }
@@ -44,69 +64,28 @@ export async function initWasm(): Promise<void> {
 }
 
 /**
- * Generate proof using WASM module with decimal witness format (recommended)
+ * Compress a snarkjs Groth16 proof to arkworks canonical compressed format (128 bytes)
  *
- * This function accepts witness in snarkjs native format (decimal strings),
- * eliminating the need for manual hex conversion.
- *
- * @param numPublicSignals - Number of public signals to extract
- * @param witnessJson - JSON stringified witness array (decimal strings)
- * @param provingKeyBytes - Binary proving key in arkworks format
- * @returns Proof and public signals
+ * @param proof - snarkjs proof object with pi_a/pi_b/pi_c
+ * @returns 0x-prefixed 128-byte compressed proof hex
  */
-export async function generateProofFromDecimalWasm(
-  numPublicSignals: number,
-  witnessJson: string,
-  provingKeyBytes: Uint8Array
-): Promise<WasmProofOutput> {
+export async function compressSnarkjsProofWasm(proof: SnarkjsProofLike): Promise<string> {
   if (!wasmModule) {
     await initWasm();
   }
 
   try {
-    // Call WASM function: generate_proof_from_decimal_wasm(num_public_signals, witness_json, proving_key_bytes)
-    const resultJson = wasmModule.generate_proof_from_decimal_wasm(
-      numPublicSignals,
-      witnessJson,
-      provingKeyBytes
-    );
-    return JSON.parse(resultJson);
+    const normalizedProof = {
+      pi_a: [String(proof.pi_a[0]), String(proof.pi_a[1])],
+      pi_b: [
+        [String(proof.pi_b[0][0]), String(proof.pi_b[0][1])],
+        [String(proof.pi_b[1][0]), String(proof.pi_b[1][1])],
+      ],
+      pi_c: [String(proof.pi_c[0]), String(proof.pi_c[1])],
+    };
+
+    return wasmModule.compress_snarkjs_proof_wasm(JSON.stringify(normalizedProof));
   } catch (error) {
-    throw new Error(`WASM proof generation failed: ${(error as Error).message}`);
+    throw new Error(`WASM proof compression failed: ${(error as Error).message}`);
   }
-}
-
-/**
- * Generate proof using WASM module with hex LE witness format (legacy)
- *
- * @deprecated Use generateProofFromDecimalWasm() instead
- * @param circuitType - Type of circuit (unshield, transfer, or disclosure)
- * @param witnessJson - JSON stringified witness array (hex LE strings)
- * @param provingKeyBytes - Binary proving key in arkworks format
- * @returns Proof and public signals
- */
-export async function generateProofWasm(
-  circuitType: 'unshield' | 'transfer' | 'disclosure',
-  witnessJson: string,
-  provingKeyBytes: Uint8Array
-): Promise<WasmProofOutput> {
-  if (!wasmModule) {
-    await initWasm();
-  }
-
-  try {
-    // Call WASM function: generate_proof_wasm(circuit_type, witness_json, proving_key_bytes)
-    const resultJson = wasmModule.generate_proof_wasm(circuitType, witnessJson, provingKeyBytes);
-    return JSON.parse(resultJson);
-  } catch (error) {
-    throw new Error(`WASM proof generation failed: ${(error as Error).message}`);
-  }
-}
-
-/**
- * Check if WASM module is initialized
- * @internal
- */
-export function isWasmReady(): boolean {
-  return wasmModule !== null;
 }
