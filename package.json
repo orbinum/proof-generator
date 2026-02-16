@@ -1,6 +1,6 @@
 {
   "name": "@orbinum/proof-generator",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "ZK-SNARK proof generator for Orbinum. Combines snarkjs (witness) with arkworks WASM (proof generation) to produce 128-byte Groth16 proofs.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,7 +17,6 @@
     "access": "public"
   },
   "scripts": {
-    "postinstall": "tsx scripts/download-artifacts.ts",
     "build": "tsc",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -31,7 +30,7 @@
     "lint": "tsc --noEmit",
     "prepare": "husky",
     "prepublishOnly": "npm run build && npm run lint && npm test",
-    "clean": "rm -rf dist circuits node_modules groth16-proof"
+    "clean": "rm -rf dist node_modules package-lock.json"
   },
   "keywords": [
     "zksnark",
@@ -44,16 +43,15 @@
     "orbinum"
   ],
   "dependencies": {
-    "snarkjs": "0.7.5",
-    "tar": "6.2.1",
-    "tsx": "4.21.0"
+    "@orbinum/circuits": "^0.3.0",
+    "@orbinum/groth16-proofs": "^2.0.0",
+    "snarkjs": "0.7.5"
   },
   "devDependencies": {
     "@types/circomlibjs": "0.1.6",
     "@types/jest": "29.5.14",
     "@types/node": "22.10.5",
     "@types/snarkjs": "0.7.9",
-    "@types/tar": "6.1.13",
     "circomlibjs": "0.1.7",
     "husky": "9.1.7",
     "jest": "29.7.0",
