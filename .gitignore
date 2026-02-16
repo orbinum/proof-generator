@@ -24,9 +24,3 @@ Thumbs.db
 # Env
 .env
 .env.local
-
-# Circuit artifacts
-circuits/
-
-# WASM artifacts
-groth16-proof/
