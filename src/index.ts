@@ -13,24 +13,27 @@ import {
   CircuitInputs,
   ProofResult,
   CircuitNotFoundError,
-  WitnessCalculationError,
   ProofGenerationError,
   InvalidInputsError,
 } from './types';
-import { getCircuitConfig } from './circuits';
-import * as circuitsInternal from './circuits';
-import { calculateWitness } from './witness';
-import { validateInputs, validatePublicSignals, formatProofHexForDisplay } from './utils';
-import { initWasm, generateProofFromDecimalWasm } from './wasm-loader';
-import { getCircuitProvingKeyPath } from './config';
+import { getCircuitConfig, validateCircuitArtifacts } from './circuits';
+import * as snarkjs from 'snarkjs';
+import { compressSnarkjsProofWasm } from './wasm-loader';
+import {
+  validateInputs,
+  validatePublicSignals,
+  formatProofHexForDisplay,
+  formatPublicSignalsArray,
+  validateProofSize,
+} from './utils';
 
 /**
  * Generate a ZK-SNARK proof for an Orbinum circuit
  *
  * This is the main entry point for proof generation. It:
  * 1. Validates inputs and circuit artifacts
- * 2. Calculates witness using snarkjs
- * 3. Generates proof using Rust/arkworks
+ * 2. Generates witness + proof using snarkjs.fullProve (.wasm + .zkey)
+ * 3. Converts proof to arkworks compressed format (128 bytes)
  * 4. Returns compressed 128-byte proof + public signals
  *
  * @param circuitType - Type of circuit (Unshield, Transfer, Disclosure)
@@ -69,12 +72,6 @@ export async function generateProof(
 ): Promise<ProofResult> {
   const { verbose = false, validateArtifacts = true } = options;
 
-  // Step 0: Initialize WASM
-  if (verbose) {
-    console.log('⚙️  Initializing WASM module for proof generation');
-  }
-  await initWasm();
-
   // Step 1: Get circuit config
   const config = getCircuitConfig(circuitType);
   if (!config) {
@@ -84,7 +81,7 @@ export async function generateProof(
   if (verbose) {
     console.log(`\n🔐 Generating proof for circuit: ${config.name}`);
     console.log(`   WASM: ${config.wasmPath}`);
-    console.log(`   Proving key: ${config.provingKeyPath}`);
+    console.log(`   zkey: ${config.zkeyPath}`);
   }
 
   // Step 2: Validate inputs
@@ -97,49 +94,33 @@ export async function generateProof(
   // Step 3: Validate artifacts (optional)
   if (validateArtifacts) {
     try {
-      circuitsInternal.validateCircuitArtifacts(config);
+      validateCircuitArtifacts(config);
     } catch (error) {
       throw new CircuitNotFoundError(circuitType);
     }
   }
 
-  // Step 4: Calculate witness with snarkjs
+  // Step 4: Generate proof with snarkjs
   if (verbose) {
-    console.log('\n📊 Step 1: Calculating witness...');
-  }
-
-  let witnessData;
-  try {
-    witnessData = await calculateWitness(inputs, config.wasmPath);
-
-    if (verbose) {
-      console.log(`   ✅ Witness calculated: ${witnessData.witness.length} elements`);
-    }
-  } catch (error) {
-    throw new WitnessCalculationError((error as Error).message);
-  }
-
-  // Step 5: Generate proof using WASM
-  if (verbose) {
-    console.log('\n🔐 Step 2: Generating proof with WASM...');
+    console.log('\n📊 Step 1: Generating witness + proof with snarkjs...');
   }
 
   let proofResult;
   try {
-    const fs = await import('fs/promises');
-    const provingKeyPath = getCircuitProvingKeyPath(circuitType);
-    const provingKeyBytes = await fs.readFile(provingKeyPath);
-
-    // Use new decimal format API (no conversion needed!)
-    const output = await generateProofFromDecimalWasm(
-      config.expectedPublicSignals,
-      JSON.stringify(witnessData.witness),
-      new Uint8Array(provingKeyBytes)
+    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+      inputs,
+      config.wasmPath,
+      config.zkeyPath
     );
 
+    const compressedProofHex = await compressSnarkjsProofWasm(proof as any);
+    validateProofSize(compressedProofHex);
+
+    const publicSignalsHex = formatPublicSignalsArray(publicSignals as string[]);
+
     proofResult = {
-      proof: output.proof,
-      publicSignals: output.publicSignals,
+      proof: compressedProofHex,
+      publicSignals: publicSignalsHex,
     };
 
     if (verbose) {
@@ -150,7 +131,7 @@ export async function generateProof(
     throw new ProofGenerationError((error as Error).message);
   }
 
-  // Step 6: Validate public signals count
+  // Step 5: Validate public signals count
   try {
     validatePublicSignals(proofResult.publicSignals, config.expectedPublicSignals);
   } catch (error) {
@@ -169,37 +150,26 @@ export async function generateProof(
 }
 
 /**
- * Quick check if proof generator is ready to use
- * Checks if WASM is compiled and circuits are available
+ * Check if proof generator is ready to use
+ *
+ * Verifies that WASM module and circuit artifacts are accessible.
+ *
+ * @returns true if ready, false otherwise
  */
-function isReady(): boolean {
+export function isReady(): boolean {
   try {
     const fs = require('fs');
-    const path = require('path');
 
-    // Check if WASM was compiled
-    const wasmPath = path.join(__dirname, '../groth16-proof/groth16_proofs_bg.wasm');
-    if (!fs.existsSync(wasmPath)) {
-      return false;
-    }
+    // Check if Unshield circuit is available (fastest check)
+    const config = getCircuitConfig(CircuitType.Unshield);
 
-    // Check if random circuit is available (lazy validation)
-    const allCircuitTypes = [CircuitType.Unshield, CircuitType.Transfer, CircuitType.Disclosure];
-    const randomCircuitType = allCircuitTypes[Math.floor(Math.random() * allCircuitTypes.length)];
-    const config = getCircuitConfig(randomCircuitType);
-
-    if (!fs.existsSync(config.provingKeyPath)) {
-      return false;
-    }
-
-    return true;
+    return fs.existsSync(config.wasmPath) && fs.existsSync(config.zkeyPath);
   } catch {
     return false;
   }
 }
 
 // Re-export types and utilities for convenience
-export * from './types'; // CircuitType, CircuitInputs, etc.
-export { isReady }; // Check if WASM and circuits are ready
+export * from './types'; // CircuitType, CircuitInputs, ProofResult, errors
 export { calculateWitness } from './witness'; // Advanced: direct witness calculation
-export * from './utils'; // Validation helpers for users
+export * from './utils'; // Validation and formatting helpers
