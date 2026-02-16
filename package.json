@@ -5,8 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist",
-    "scripts"
+    "dist"
   ],
   "author": "Orbinum",
   "license": "GPL-3.0-or-later OR Apache-2.0",
@@ -25,8 +24,8 @@
     "test:unshield": "jest unshield.test.ts",
     "test:transfer": "jest transfer.test.ts",
     "test:disclosure": "jest disclosure.test.ts",
-    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint": "tsc --noEmit",
     "prepare": "husky",
     "prepublishOnly": "npm run build && npm run lint && npm test",
