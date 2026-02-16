@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Major Changes
+
+- **npm package dependencies**: Artifacts now installed automatically from npm
+  - `@orbinum/circuits@^0.2.1` - Circuit artifacts (WASM, proving keys, verification keys)
+  - `@orbinum/groth16-proofs@^1.1.0` - Arkworks WASM proof generator
+  - No more postinstall downloads from GitHub releases
+
+### Changed
+
+- Removed postinstall script that downloaded from GitHub
+- Updated circuit loader to import from `@orbinum/circuits` package
+- Updated WASM loader to import from `@orbinum/groth16-proofs` package
+- Simplified `config.ts` (deprecated path resolution functions)
+- Updated `circuits.ts` to use `getCircuitPaths()` from `@orbinum/circuits`
+- Cleaner package: Removed `circuits/` and `groth16-proof/` directories
+
+### Added
+
+- Documentation for npm package migration
+- `scripts/README.md` explaining deprecated download scripts
+
+### Improved
+
+- Faster installation (npm cache vs GitHub API)
+- More reliable (no GitHub rate limits)
+- Offline-friendly (works after first install)
+- Better CI/CD (reproducible builds)
+- Semantic versioning for all dependencies
+
+### Migration Guide
+
+**From v1.x to v2.0**:
+
+```bash
+# Update package
+npm install @orbinum/proof-generator@latest
+
+# Clean old directories (optional)
+rm -rf circuits/ groth16-proof/
+
+# No code changes needed - API is compatible
+```
+
+**Breaking Changes**: None for users (internal refactoring only)
+
+## [2.0.0] - 2026-02-15
+
 ### Added
 
 - **Formatter utilities**: Comprehensive helpers for data format conversion
