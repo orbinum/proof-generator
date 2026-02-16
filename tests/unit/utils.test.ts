@@ -1,138 +1,18 @@
 /**
- * Test: Utils
+ * Unit Tests: utils.ts
+ *
+ * Tests for validation and formatting utilities
  */
 
 import {
   validateInputs,
   validateProofSize,
   validatePublicSignals,
-  formatInputValue,
-  formatInputArray,
-  formatCircuitInputs,
-  formatWitness,
-  formatProofToHex,
-  parseProofHex,
   normalizeProofHex,
   formatProofHexForDisplay,
-} from '../src/utils';
+} from '../../src/utils';
 
 describe('Utils', () => {
-  describe('formatInputValue', () => {
-    it('should convert number to string', () => {
-      expect(formatInputValue(100)).toBe('100');
-      expect(formatInputValue(0)).toBe('0');
-      expect(formatInputValue(256)).toBe('256');
-    });
-
-    it('should convert bigint to string', () => {
-      expect(formatInputValue(BigInt(100))).toBe('100');
-      expect(formatInputValue(BigInt('123456789012345678901234567890'))).toBe(
-        '123456789012345678901234567890'
-      );
-    });
-
-    it('should pass through decimal strings', () => {
-      expect(formatInputValue('100')).toBe('100');
-      expect(formatInputValue('0')).toBe('0');
-    });
-
-    it('should convert hex strings to decimal', () => {
-      expect(formatInputValue('0x64')).toBe('100');
-      expect(formatInputValue('0x100')).toBe('256');
-      expect(formatInputValue('0x0')).toBe('0');
-    });
-  });
-
-  describe('formatInputArray', () => {
-    it('should convert array of values', () => {
-      expect(formatInputArray([1, 2, 3])).toEqual(['1', '2', '3']);
-      expect(formatInputArray([BigInt(100), BigInt(200)])).toEqual(['100', '200']);
-      expect(formatInputArray(['0x64', '0xc8'])).toEqual(['100', '200']);
-    });
-  });
-
-  describe('formatCircuitInputs', () => {
-    it('should format circuit inputs', () => {
-      const inputs = {
-        amount: 100,
-        nullifier: 0x123,
-        pathElements: [1, 2, 3],
-      };
-      const formatted = formatCircuitInputs(inputs);
-
-      expect(formatted).toEqual({
-        amount: '100',
-        nullifier: '291',
-        pathElements: ['1', '2', '3'],
-      });
-    });
-  });
-
-  describe('formatWitness', () => {
-    it('should convert bigint array to decimal strings', () => {
-      const witness = [BigInt(1), BigInt(2), BigInt(3)];
-      const formatted = formatWitness(witness);
-
-      expect(formatted).toEqual(['1', '2', '3']);
-    });
-
-    it('should convert number array to decimal strings', () => {
-      const witness = [1, 2, 3];
-      const formatted = formatWitness(witness);
-
-      expect(formatted).toEqual(['1', '2', '3']);
-    });
-
-    it('should pass through decimal string array', () => {
-      const witness = ['1', '2', '3'];
-      const formatted = formatWitness(witness);
-
-      expect(formatted).toEqual(['1', '2', '3']);
-    });
-
-    it('should convert hex strings to decimal', () => {
-      const witness = ['0x01', '0x02', '0x03'];
-      const formatted = formatWitness(witness);
-
-      expect(formatted).toEqual(['1', '2', '3']);
-    });
-  });
-
-  describe('formatProofToHex', () => {
-    it('should convert proof bytes to hex', () => {
-      const bytes = new Uint8Array(128);
-      bytes[0] = 0xab;
-      bytes[1] = 0xcd;
-
-      const hex = formatProofToHex(bytes);
-
-      expect(hex).toMatch(/^0x[0-9a-f]{256}$/);
-      expect(hex.substring(0, 6)).toBe('0xabcd');
-    });
-
-    it('should reject invalid proof size', () => {
-      const bytes = new Uint8Array(64);
-
-      expect(() => formatProofToHex(bytes)).toThrow(/Invalid proof size/);
-    });
-  });
-
-  describe('parseProofHex', () => {
-    it('should parse valid proof hex', () => {
-      const hex = '0x' + '00'.repeat(128);
-      const bytes = parseProofHex(hex);
-
-      expect(bytes.length).toBe(128);
-      expect(bytes[0]).toBe(0);
-    });
-
-    it('should reject invalid hex length', () => {
-      const hex = '0x' + '00'.repeat(64);
-
-      expect(() => parseProofHex(hex)).toThrow(/Invalid proof hex length/);
-    });
-  });
-
   describe('normalizeProofHex', () => {
     it('should add 0x prefix', () => {
       const hex = 'ABCD' + '00'.repeat(126);

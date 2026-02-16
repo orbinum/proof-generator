@@ -1,12 +1,22 @@
 /**
- * Test: Unshield Proof Generation
+ * Integration Test: Unshield Circuit
+ *
+ * Tests the complete proof generation flow for Unshield circuit:
+ * - Circuit artifact loading
+ * - Poseidon hash computation
+ * - Merkle tree construction
+ * - Witness calculation (snarkjs)
+ * - Proof generation (arkworks)
+ * - Proof compression (128 bytes)
+ *
+ * This is an integration test that uses real circuit artifacts and cryptography.
  */
 
 // @ts-ignore - circomlibjs doesn't have types
 import { buildPoseidon } from 'circomlibjs';
-import { generateProof, CircuitType, isReady } from '../src';
+import { generateProof, CircuitType, isReady } from '../../src';
 
-describe('Unshield Proof Generation', () => {
+describe('Integration: Unshield Proof Generation', () => {
   let poseidon: any;
 
   beforeAll(async () => {

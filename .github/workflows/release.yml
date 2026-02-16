@@ -61,6 +61,32 @@ jobs:
         if: steps.check_tag.outputs.exists == 'false'
         run: npm test
 
+      - name: Update CHANGELOG
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DATE=$(date +%Y-%m-%d)
+          
+          echo "📝 Updating CHANGELOG.md for version $VERSION"
+          
+          # Replace [Unreleased] with [VERSION] - DATE
+          sed -i "s/## \[Unreleased\]/## [$VERSION] - $DATE/" CHANGELOG.md
+          
+          # Add new [Unreleased] section at the top after the header
+          sed -i "/^## \[$VERSION\] - $DATE/i## [Unreleased]\n" CHANGELOG.md
+          
+          echo "✅ CHANGELOG.md updated"
+          cat CHANGELOG.md | head -20
+
+      - name: Commit CHANGELOG
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore: update CHANGELOG for v${{ steps.version.outputs.version }}" || echo "No changes to commit"
+          git push origin main
+
       - name: Create GitHub Release and Tag
         if: steps.check_tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v1

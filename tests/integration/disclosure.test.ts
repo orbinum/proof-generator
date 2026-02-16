@@ -1,12 +1,22 @@
 /**
- * Test: Disclosure Proof Generation
+ * Integration Test: Disclosure Circuit
+ *
+ * Tests the complete proof generation flow for selective disclosure:
+ * - Commitment verification
+ * - Selective information reveal
+ * - Owner identity masking
+ * - Verification key hashing
+ * - Zero-knowledge proof generation
+ *
+ * This is an integration test that validates the selective disclosure protocol
+ * allowing users to prove ownership without revealing all note details.
  */
 
 // @ts-ignore - circomlibjs doesn't have types
 import { buildPoseidon } from 'circomlibjs';
-import { generateProof, CircuitType, isReady } from '../src';
+import { generateProof, CircuitType, isReady } from '../../src';
 
-describe('Disclosure Proof Generation', () => {
+describe('Integration: Disclosure Proof Generation', () => {
   let poseidon: any;
 
   beforeAll(async () => {
@@ -28,32 +38,36 @@ describe('Disclosure Proof Generation', () => {
     const assetId = BigInt(0);
     const ownerPubkey = BigInt('0x' + '2'.repeat(64));
     const blinding = BigInt('0x' + '9'.repeat(64));
-    const verificationKey = BigInt('0x' + '3'.repeat(64)); // Verification key of the owner
-    const mask = BigInt('0x' + 'f'.repeat(64)); // Mask to partially hide owner
 
-    // Compute commitment
+    // Compute commitment = Poseidon(value, asset_id, owner_pubkey, blinding)
     const commitment = poseidon([noteValue, assetId, ownerPubkey, blinding]);
     const commitmentBigInt = F.toObject(commitment);
 
-    // Compute vk_hash (hash of verification key)
-    const vkHash = poseidon([verificationKey]);
-    const vkHashBigInt = F.toObject(vkHash);
+    // Compute viewing_key = Poseidon(owner_pubkey)
+    const viewingKey = poseidon([ownerPubkey]);
+    const viewingKeyBigInt = F.toObject(viewingKey);
 
-    // Compute revealed_owner_hash (masked owner hash)
-    const revealedOwnerHash = poseidon([ownerPubkey, mask]);
+    // Compute revealed_owner_hash = Poseidon(owner_pubkey) for this test
+    const revealedOwnerHash = poseidon([ownerPubkey]);
     const revealedOwnerHashBigInt = F.toObject(revealedOwnerHash);
 
-    // Prepare inputs
+    // Prepare inputs (matching disclosure.circom)
     const inputs = {
+      // Public inputs
       commitment: commitmentBigInt.toString(),
-      vk_hash: vkHashBigInt.toString(),
-      mask: mask.toString(),
-      revealed_owner_hash: revealedOwnerHashBigInt.toString(),
-      note_value: noteValue.toString(),
-      note_asset_id: assetId.toString(),
-      note_owner: ownerPubkey.toString(),
-      note_blinding: blinding.toString(),
-      verification_key: verificationKey.toString(),
+      revealed_value: '0', // 0 = oculto
+      revealed_asset_id: '0', // 0 = oculto
+      revealed_owner_hash: revealedOwnerHashBigInt.toString(), // Revelado
+      // Private inputs
+      value: noteValue.toString(),
+      asset_id: assetId.toString(),
+      owner_pubkey: ownerPubkey.toString(),
+      blinding: blinding.toString(),
+      viewing_key: viewingKeyBigInt.toString(),
+      // Disclosure masks
+      disclose_value: '0', // 0 = no revelar
+      disclose_asset_id: '0', // 0 = no revelar
+      disclose_owner: '1', // 1 = revelar
     };
 
     // Generate proof
@@ -78,10 +92,10 @@ describe('Disclosure Proof Generation', () => {
       });
 
       // Verify public signals match inputs
-      // Order: commitment, vk_hash, mask, revealed_owner_hash
+      // Order: commitment, revealed_value, revealed_asset_id, revealed_owner_hash
       expect(result.publicSignals[0]).toBeDefined(); // commitment
-      expect(result.publicSignals[1]).toBeDefined(); // vk_hash
-      expect(result.publicSignals[2]).toBeDefined(); // mask
+      expect(result.publicSignals[1]).toBeDefined(); // revealed_value (0)
+      expect(result.publicSignals[2]).toBeDefined(); // revealed_asset_id (0)
       expect(result.publicSignals[3]).toBeDefined(); // revealed_owner_hash
     } catch (error: any) {
       // Skip test if WASM fails to load (can happen in certain test environments)

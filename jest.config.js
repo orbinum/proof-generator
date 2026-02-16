@@ -31,5 +31,9 @@ module.exports = {
       },
     ],
   },
+  // Don't transform WASM packages - use them as-is
+  transformIgnorePatterns: [
+    'node_modules/(?!@orbinum/groth16-proofs)',
+  ],
 };
 

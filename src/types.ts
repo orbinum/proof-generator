@@ -9,8 +9,11 @@ export enum CircuitType {
   Disclosure = 'disclosure',
 }
 
+/** Circuit input value types (supports nested arrays for 2D inputs) */
+export type CircuitInputValue = string | number | string[] | number[] | string[][] | number[][];
+
 /** Circuit input: any key-value pairs (circuit-specific) */
-export type CircuitInputs = Record<string, string | string[] | number | number[]>;
+export type CircuitInputs = Record<string, CircuitInputValue>;
 
 /** Proof generation result */
 export interface ProofResult {
@@ -28,6 +31,8 @@ export interface CircuitConfig {
   name: string;
   /** Path to WASM file */
   wasmPath: string;
+  /** Path to zkey proving key (snarkjs) */
+  zkeyPath: string;
   /** Path to .ark proving key */
   provingKeyPath: string;
   /** Expected number of public signals */
