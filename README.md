@@ -9,11 +9,18 @@
 
 Generate **128-byte Groth16 ZK-SNARK proofs** in ~6-8.5 seconds. Same TypeScript code runs identically in Node.js, browsers, Electron, and Tauri.
 
+**New in v2.0**: Circuit artifacts and WASM modules are now installed automatically as npm dependencies (`@orbinum/circuits` and `@orbinum/groth16-proofs`). No more manual downloads!
+
 ## Quick Start
 
 ```bash
 npm install @orbinum/proof-generator
 ```
+
+Dependencies are installed automatically:
+
+- `@orbinum/circuits` - Circuit artifacts (WASM, proving keys)
+- `@orbinum/groth16-proofs` - Arkworks WASM proof generator
 
 ```typescript
 import { generateProof, CircuitType } from '@orbinum/proof-generator';
@@ -31,9 +38,8 @@ console.log('Signals:', result.publicSignals); // ['0x...', ...]
 
 ## Documentation
 
-- **[API Reference](docs/api.md)** - Complete API, error handling, configuration
-- **[Formatter Utilities](docs/formatters.md)** - Data format conversion helpers (decimal, hex, BigInt)
-- **[Development Guide](docs/development.md)** - Setup, testing, architecture details
+- **[API Reference](docs/api.md)** - Complete API, error handling, and usage examples
+- **[Development Guide](docs/development.md)** - Setup, testing, architecture, and contribution guide
 
 ## Features
 
@@ -52,11 +58,21 @@ console.log('Signals:', result.publicSignals); // ['0x...', ...]
 | Transfer   | Private-to-private transfer          |
 | Disclosure | Selective revelation                 |
 
-## Related Repositories
+## Related Packages
 
-- [orbinum/groth16-proofs](https://github.com/orbinum/groth16-proofs) - WASM compilation
-- [orbinum/circuits](https://github.com/orbinum/circuits) - Circuit definitions
-- [orbinum/node](https://github.com/orbinum/node) - Main implementation
+- [@orbinum/circuits](https://www.npmjs.com/package/@orbinum/circuits) - Circuit artifacts (installed automatically)
+- [@orbinum/groth16-proofs](https://www.npmjs.com/package/@orbinum/groth16-proofs) - WASM proof generator (installed automatically)
+- [orbinum/node](https://github.com/orbinum/node) - Substrate blockchain node
+
+## Migration from v1.x
+
+If you're upgrading from v1.x:
+
+- ✅ No code changes required
+- ✅ Artifacts now come from npm instead of GitHub releases
+- ✅ Faster installation (npm cache)
+- ✅ Offline-friendly
+- ❌ Old `circuits/` and `groth16-proof/` directories can be deleted
 
 ## License
 
