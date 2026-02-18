@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-02-18
+
+### Added
+
+- **ArtifactProvider Pattern**: New abstraction for loading circuit artifacts
+  - `ArtifactProvider` interface for implementing custom artifact loading strategies
+  - `NodeArtifactProvider` - Load artifacts from npm packages using Node.js `fs` module
+  - `WebArtifactProvider` - Load artifacts via HTTP fetch (browser-compatible)
+- **Browser Support**: Full browser compatibility with web-based proof generation
+  - Automatic provider detection (Node.js vs browser environment)
+- **New Unit Tests**: `provider.test.ts` for WebArtifactProvider URL construction and error handling
+
+### Changed
+
+- **generateProof()**: Now accepts optional `provider` parameter for custom artifact loading
+  - Automatically selects appropriate provider if not specified
+  - Enables flexible artifact resolution (npm packages, HTTP, custom implementations)
+- **circuits.ts**: Complete refactoring to use ArtifactProvider pattern
+  - Replaced static file system logic with dynamic provider-based loading
+  - Circuit config now returns relative file paths instead of absolute paths
+- **TypeScript Configuration**: Added `"dom"` library for browser compatibility
+
+### Improved
+
+- Better artifact loading abstraction for extensibility
+- More flexible deployment options (node packages, CDN, custom servers)
+- Cleaner separation of concerns between circuit config and artifact loading
+- Better error handling for missing artifacts with provider-specific messages
+
+### Removed
+
+- **Deprecated Functions**:
+  - `isReady()` - No longer needed with provider-based architecture
+  - `calculateWitness()` - Use `generateProof()` with verbose logging instead
+  - `validateCircuitArtifacts()` - Validation now handled by providers
+
+### Fixed
+
+- Fixed TypeScript strict mode compatibility in test files
+- Improved error messages when artifacts cannot be loaded
+
+### Dependencies Updated
+
+- `@orbinum/circuits`: ^0.3.0 → ^0.3.1
+- `typescript`: 5.7.3 → ^5.9.3 (pinned to caret for compatibility)
+- Minor updates: `b4a` 1.7.4 → 1.7.5, `get-east-asian-width` 1.4.0 → 1.5.0
+
+### Migration Guide
+
+**From v3.0 to v3.1**: No breaking changes for most users. The API remains fully compatible:
+
+```typescript
+// Still works - automatic provider selection
+const result = await generateProof(CircuitType.Unshield, inputs);
+
+// New in v3.1 - custom provider
+import { WebArtifactProvider } from '@orbinum/proof-generator';
+const provider = new WebArtifactProvider('https://my-cdn.com/circuits');
+const result = await generateProof(CircuitType.Unshield, inputs, { provider });
+```
+
+If using removed functions (`isReady()`, `calculateWitness()`):
+
+- Remove `isReady()` checks - providers handle artifact validation
+- Replace `calculateWitness()` with `generateProof(..., { verbose: true })`
+
 ## [3.0.0] - 2026-02-16
 
 ### Major Changes
