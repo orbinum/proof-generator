@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.1.1] - 2026-02-18
 
+### Fixed
+
+- **CI/CD Release Workflow**: Fixed GitHub Actions release workflow to properly trigger npm publish
+  - Previous release (v3.1.0) was merged without triggering the release CI pipeline
+  - Updated release workflow to ensure proper npm package publishing
+  - Verified all release steps execute correctly: build → lint → test → npm publish
+
+### Changed
+
+- Applied force rebuild to ensure clean dist files for npm package
+
 ## [3.1.0] - 2026-02-18
 
 ### Added
