@@ -14,7 +14,7 @@
 
 // @ts-ignore - circomlibjs doesn't have types
 import { buildPoseidon } from 'circomlibjs';
-import { generateProof, CircuitType, isReady } from '../../src';
+import { generateProof, CircuitType } from '../../src';
 
 describe('Integration: Disclosure Proof Generation', () => {
   let poseidon: any;
@@ -24,13 +24,7 @@ describe('Integration: Disclosure Proof Generation', () => {
     poseidon = await buildPoseidon();
   });
 
-  // Skip this test if artifacts are not available
   it('should generate a valid disclosure proof', async () => {
-    // Check if proof generator is ready
-    if (!isReady()) {
-      console.warn('⚠️  Skipping: Proof generator not ready. Run: npm run build');
-      return;
-    }
     const F = poseidon.F;
 
     // Create note
@@ -112,10 +106,6 @@ describe('Integration: Disclosure Proof Generation', () => {
   }, 30000); // 30 second timeout
 
   it('should fail with invalid inputs', async () => {
-    if (!isReady()) {
-      return;
-    }
-
     await expect(
       generateProof(CircuitType.Disclosure, {
         commitment: 'invalid',
@@ -124,10 +114,6 @@ describe('Integration: Disclosure Proof Generation', () => {
   });
 
   it('should fail with missing required fields', async () => {
-    if (!isReady()) {
-      return;
-    }
-
     await expect(
       generateProof(CircuitType.Disclosure, {
         commitment: '123',
@@ -137,10 +123,6 @@ describe('Integration: Disclosure Proof Generation', () => {
   });
 
   it('should fail with null/undefined inputs', async () => {
-    if (!isReady()) {
-      return;
-    }
-
     await expect(
       // @ts-ignore - Testing invalid input
       generateProof(CircuitType.Disclosure, null)

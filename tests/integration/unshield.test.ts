@@ -14,7 +14,7 @@
 
 // @ts-ignore - circomlibjs doesn't have types
 import { buildPoseidon } from 'circomlibjs';
-import { generateProof, CircuitType, isReady } from '../../src';
+import { generateProof, CircuitType } from '../../src';
 
 describe('Integration: Unshield Proof Generation', () => {
   let poseidon: any;
@@ -24,13 +24,7 @@ describe('Integration: Unshield Proof Generation', () => {
     poseidon = await buildPoseidon();
   });
 
-  // Skip this test if artifacts are not available
   it('should generate a valid unshield proof', async () => {
-    // Check if proof generator is ready
-    if (!isReady()) {
-      console.warn('⚠️  Skipping: Proof generator not ready. Run: npm run build');
-      return;
-    }
     const F = poseidon.F;
 
     // Create note
