@@ -15,7 +15,7 @@
 
 // @ts-ignore - circomlibjs doesn't have types
 import { buildPoseidon, buildEddsa, buildBabyjub } from 'circomlibjs';
-import { generateProof, CircuitType, isReady } from '../../src';
+import { generateProof, CircuitType } from '../../src';
 
 describe('Integration: Transfer Proof Generation', () => {
   let poseidon: any;
@@ -29,13 +29,7 @@ describe('Integration: Transfer Proof Generation', () => {
     babyJub = await buildBabyjub();
   });
 
-  // Skip this test if artifacts are not available
   it('should generate a valid transfer proof', async () => {
-    // Check if proof generator is ready
-    if (!isReady()) {
-      console.warn('⚠️  Skipping: Proof generator not ready. Run: npm run build');
-      return;
-    }
     const F = poseidon.F;
 
     // Generate EdDSA keypairs for input note owners
@@ -233,10 +227,6 @@ describe('Integration: Transfer Proof Generation', () => {
   }, 30000); // 30 second timeout
 
   it('should fail with invalid inputs', async () => {
-    if (!isReady()) {
-      return;
-    }
-
     await expect(
       generateProof(CircuitType.Transfer, {
         merkle_root: 'invalid',
@@ -245,10 +235,6 @@ describe('Integration: Transfer Proof Generation', () => {
   });
 
   it('should fail with missing required fields', async () => {
-    if (!isReady()) {
-      return;
-    }
-
     await expect(
       generateProof(CircuitType.Transfer, {
         merkle_root: '123',
@@ -258,10 +244,6 @@ describe('Integration: Transfer Proof Generation', () => {
   });
 
   it('should fail with null/undefined inputs', async () => {
-    if (!isReady()) {
-      return;
-    }
-
     await expect(
       // @ts-ignore - Testing invalid input
       generateProof(CircuitType.Transfer, null)
