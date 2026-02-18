@@ -1,116 +1,128 @@
 /**
- * Circuit Configuration
+ * Circuit Configuration and Artifact Providers
  *
- * Defines paths and metadata for all supported circuits using versioned npm packages.
+ * Defines paths and metadata for all supported circuits.
+ * Implements ArtifactProvider for Node.js (fs) and Browser (fetch).
  */
 
 import { CircuitType, CircuitConfig } from './types';
-import * as fs from 'fs';
+import { ArtifactProvider } from './provider';
 import * as path from 'path';
 
-/**
- * Get circuit configuration from local workspace artifacts
- */
+// ============================================================================
+// Defaults & Configuration
+// ============================================================================
+
+const DEFAULT_CIRCUIT_URL = 'https://circuits.orbinum.io/v1';
+
 export function getCircuitConfig(circuitType: CircuitType): CircuitConfig {
   const circuitName = circuitType.toLowerCase();
-  const paths = getPackageCircuitPaths(circuitName);
-
   return {
     name: circuitName,
-    wasmPath: paths.wasm,
-    zkeyPath: paths.zkey,
-    provingKeyPath: paths.ark,
+    wasmPath: `${circuitName}.wasm`,
+    zkeyPath: `${circuitName}_pk.zkey`,
+    provingKeyPath: `${circuitName}_pk.ark`,
     expectedPublicSignals: getExpectedPublicSignals(circuitType),
   };
 }
 
-/**
- * Resolve circuit artifact paths from the @orbinum/circuits npm package
- *
- * Searches for circuit artifacts (.wasm, _pk.ark, _pk.zkey) in common
- * package layouts: root, artifacts/, pkg/ directories.
- *
- * @param circuitName - Circuit name (e.g., 'unshield', 'transfer')
- * @returns Paths to circuit artifacts
- * @throws Error if package or artifacts not found
- */
-function getPackageCircuitPaths(circuitName: string): { wasm: string; ark: string; zkey: string } {
-  // Try to resolve @orbinum/circuits or orbinum-circuits package
-  const packageCandidates = ['@orbinum/circuits/package.json', 'orbinum-circuits/package.json'];
-
-  let packageRoot: string | null = null;
-  let packageName: string | null = null;
-
-  for (const candidate of packageCandidates) {
-    try {
-      packageRoot = path.dirname(require.resolve(candidate));
-      packageName = candidate.replace('/package.json', '');
-      break;
-    } catch {
-      continue;
-    }
-  }
-
-  if (!packageRoot || !packageName) {
-    throw new Error(
-      'Cannot resolve @orbinum/circuits package. Install with: npm install @orbinum/circuits'
-    );
-  }
-
-  // Search in common artifact locations
-  const searchDirs = [
-    packageRoot,
-    path.join(packageRoot, 'artifacts'),
-    path.join(packageRoot, 'pkg'),
-  ];
-
-  for (const dir of searchDirs) {
-    const wasmPath = path.join(dir, `${circuitName}.wasm`);
-    const arkPath = path.join(dir, `${circuitName}_pk.ark`);
-    const zkeyPath = path.join(dir, `${circuitName}_pk.zkey`);
-
-    if (fs.existsSync(wasmPath) && fs.existsSync(arkPath) && fs.existsSync(zkeyPath)) {
-      return { wasm: wasmPath, ark: arkPath, zkey: zkeyPath };
-    }
-  }
-
-  throw new Error(
-    `Circuit artifacts for "${circuitName}" not found in ${packageName}. ` +
-      `Searched directories: ${searchDirs.join(', ')}`
-  );
-}
-
-/**
- * Get expected number of public signals for each circuit
- */
 function getExpectedPublicSignals(circuitType: CircuitType): number {
   switch (circuitType) {
     case CircuitType.Unshield:
-      return 5; // merkle_root, nullifier, amount, recipient, asset_id
+      return 5;
     case CircuitType.Transfer:
-      return 5; // merkle_root, input_nullifiers(2), output_commitments(2)
+      return 5;
     case CircuitType.Disclosure:
-      return 4; // commitment, vk_hash, mask, revealed_owner_hash
+      return 4;
     default:
       throw new Error(`Unknown circuit type: ${circuitType}`);
   }
 }
 
-/**
- * Validate that circuit artifacts exist
- */
-export function validateCircuitArtifacts(config: CircuitConfig): void {
-  const fs = require('fs');
+// ============================================================================
+// Node.js Provider (FS)
+// ============================================================================
 
-  if (!fs.existsSync(config.wasmPath)) {
-    throw new Error(`WASM not found: ${config.wasmPath}`);
+export class NodeArtifactProvider implements ArtifactProvider {
+  private fs: any;
+  private packageRoot: string;
+
+  constructor(packageRoot?: string) {
+    // Dynamic require to avoid bundling fs in browser
+    try {
+      this.fs = eval('require')('fs');
+    } catch (e) {
+      throw new Error('NodeArtifactProvider requires Node.js environment');
+    }
+    this.packageRoot = packageRoot || this.resolvePackageRoot();
   }
 
-  if (!fs.existsSync(config.provingKeyPath)) {
-    throw new Error(`Proving key not found: ${config.provingKeyPath}`);
+  private resolvePackageRoot(): string {
+    const packageCandidates = ['@orbinum/circuits/package.json', 'orbinum-circuits/package.json'];
+    for (const candidate of packageCandidates) {
+      try {
+        return path.dirname(eval('require').resolve(candidate));
+      } catch {
+        continue;
+      }
+    }
+    throw new Error('Cannot resolve @orbinum/circuits package');
   }
 
-  if (!fs.existsSync(config.zkeyPath)) {
-    throw new Error(`zkey not found: ${config.zkeyPath}`);
+  async getCircuitWasm(type: CircuitType): Promise<Uint8Array> {
+    const config = getCircuitConfig(type);
+    const filePath = this.findArtifactPath(config.wasmPath);
+    return this.fs.readFileSync(filePath);
+  }
+
+  async getCircuitZkey(type: CircuitType): Promise<Uint8Array> {
+    const config = getCircuitConfig(type);
+    const filePath = this.findArtifactPath(config.zkeyPath);
+    return this.fs.readFileSync(filePath);
+  }
+
+  private findArtifactPath(filename: string): string {
+    const searchDirs = [
+      this.packageRoot,
+      path.join(this.packageRoot, 'artifacts'),
+      path.join(this.packageRoot, 'pkg'),
+    ];
+    for (const dir of searchDirs) {
+      const p = path.join(dir, filename);
+      if (this.fs.existsSync(p)) return p;
+    }
+    throw new Error(`Artifact ${filename} not found in ${this.packageRoot}`);
+  }
+}
+
+// ============================================================================
+// Web Provider (Fetch)
+// ============================================================================
+
+export class WebArtifactProvider implements ArtifactProvider {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = DEFAULT_CIRCUIT_URL) {
+    this.baseUrl = baseUrl.replace(/\/$/, '');
+  }
+
+  async getCircuitWasm(type: CircuitType): Promise<Uint8Array> {
+    const config = getCircuitConfig(type);
+    return this.fetchArtifact(config.wasmPath);
+  }
+
+  async getCircuitZkey(type: CircuitType): Promise<Uint8Array> {
+    const config = getCircuitConfig(type);
+    return this.fetchArtifact(config.zkeyPath);
+  }
+
+  private async fetchArtifact(filename: string): Promise<Uint8Array> {
+    const url = `${this.baseUrl}/${filename}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch circuit artifact: ${url} (${response.status})`);
+    }
+    const buffer = await response.arrayBuffer();
+    return new Uint8Array(buffer);
   }
 }
