@@ -26,6 +26,7 @@ module.exports = {
       {
         useESM: true,
         tsconfig: {
+          target: 'ES2020',
           module: 'esnext',
         },
       },

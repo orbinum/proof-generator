@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`generateDisclosureProof()`** (`src/disclosure.ts`) — new proof generation function for selective disclosure circuit:
+  - Accepts `value`, `ownerPubkey`, `blinding`, `assetId`, `commitment` as `bigint` + `DisclosureMask` flags
+  - Computes `viewing_key = Poseidon(owner_pubkey)` via circomlibjs for ZK-friendly key derivation
+  - Generates Groth16 proof via `disclosure.wasm` + `disclosure_pk.zkey` artifacts
+  - Returns `DisclosureProofOutput` with 128-byte compressed proof, 4 public signals (LE hex), and `revealedData` decoded to human-readable values
+  - Validates mask: throws if all flags are `false`
+- **New types exported** from `src/index.ts`:
+  - `DisclosureMask` — three boolean disclosure flags (`discloseValue`, `discloseAssetId`, `discloseOwner`)
+  - `DisclosureProofOutput` — proof + publicSignals + revealedData
+  - `bigIntToBytes32()` / `bytes32ToBigInt()` — big-endian field element helpers
+  - `hexSignalToBigInt()` — decode LE hex public signals back to BigInt
+  - `bigIntToHex()` — BigInt to 0x-prefixed 64-char big-endian hex
+- **`CircuitType.Disclosure`** added to `src/circuits.ts` with `expectedPublicSignals: 4`
+- **30 unit tests** in `tests/unit/disclosure.test.ts` across 5 describe blocks — all pass in 1.4s
+- **Integration test** `tests/integration/disclosure.test.ts` with real circuit artifacts (graceful skip if artifacts unavailable)
+
 ## [3.1.1] - 2026-02-18
 
 ### Fixed
