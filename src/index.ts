@@ -145,3 +145,4 @@ export * from './types';
 export * from './utils';
 export * from './provider';
 export { NodeArtifactProvider, WebArtifactProvider } from './circuits';
+export { generateDisclosureProof } from './disclosure';
