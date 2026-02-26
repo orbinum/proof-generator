@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-02-26
+
 ### Changed
 
 - **`@orbinum/circuits` bumped** de `^0.3.0` a `^0.3.1` — fetch the latest release of circuit artifacts (WASM, zkey, ark) published on npm.
