@@ -31,7 +31,7 @@ import { ArtifactProvider } from './provider';
 /**
  * Generate a ZK-SNARK proof for an Orbinum circuit
  *
- * @param circuitType - Type of circuit (Unshield, Transfer, Disclosure)
+ * @param circuitType - Type of circuit (Unshield, Transfer, Disclosure, PrivateLink)
  * @param inputs - Circuit inputs (structure depends on circuit type)
  * @param options - Configuration including artifact provider
  */

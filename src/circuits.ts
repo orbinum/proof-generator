@@ -34,6 +34,8 @@ function getExpectedPublicSignals(circuitType: CircuitType): number {
       return 5;
     case CircuitType.Disclosure:
       return 4;
+    case CircuitType.PrivateLink:
+      return 2;
     default:
       throw new Error(`Unknown circuit type: ${circuitType}`);
   }
