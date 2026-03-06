@@ -156,6 +156,7 @@ enum CircuitType {
   Unshield = 'unshield', // Withdrawal to public address
   Transfer = 'transfer', // Private transfer
   Disclosure = 'disclosure', // Selective revelation
+  PrivateLink = 'private_link', // Privacy-preserving cross-chain identity dispatch
 }
 ```
 
@@ -167,6 +168,7 @@ import { CircuitType } from '@orbinum/proof-generator';
 await generateProof(CircuitType.Unshield, inputs);
 await generateProof(CircuitType.Transfer, inputs);
 await generateProof(CircuitType.Disclosure, inputs);
+await generateProof(CircuitType.PrivateLink, inputs);
 ```
 
 ## Error Handling
@@ -227,11 +229,12 @@ try {
 
 ## Supported Circuits
 
-| Circuit        | Public Signals | Key Inputs                                                                           | Use Case                             |
-| -------------- | -------------- | ------------------------------------------------------------------------------------ | ------------------------------------ |
-| **Unshield**   | 5              | `merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, note fields, `path_*` | Withdraw from pool to public address |
-| **Transfer**   | 5              | `merkle_root`, input/output nullifiers and commitments, note fields, `path_*`        | Private-to-private transfer          |
-| **Disclosure** | 4              | `commitment`, `viewing_key`, revealed fields, disclosure masks, note fields          | Selective revelation                 |
+| Circuit         | Public Signals | Key Inputs                                                                           | Use Case                                         |
+| --------------- | -------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| **Unshield**    | 5              | `merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, note fields, `path_*` | Withdraw from pool to public address             |
+| **Transfer**    | 5              | `merkle_root`, input/output nullifiers and commitments, note fields, `path_*`        | Private-to-private transfer                      |
+| **Disclosure**  | 4              | `commitment`, `viewing_key`, revealed fields, disclosure masks, note fields          | Selective revelation                             |
+| **PrivateLink** | 2              | `commitment`, `call_hash_fe`                                                         | Privacy-preserving cross-chain identity dispatch |
 
 ### Output Format
 
@@ -351,6 +354,7 @@ Proof generation is compute-intensive. Expected times:
 - **Unshield**: ~1.5s
 - **Transfer**: ~3s
 - **Disclosure**: ~0.8s
+- **PrivateLink**: ~0.7s
 
 For faster proofs, ensure:
 

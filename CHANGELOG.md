@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.3.0] - 2026-03-06
+
+### Added
+
+- **`private_link` circuit support** across the proof generation flow:
+  - Added `CircuitType.PrivateLink = 'private_link'` in `src/types.ts`
+  - Added circuit config resolution for `private_link.wasm`, `private_link_pk.zkey`, `private_link_pk.ark`
+  - Added expected public signals validation for private link proofs (`2` public signals)
+
+### Changed
+
+- Updated unit test coverage:
+  - `tests/unit/circuits.test.ts` now validates private link artifact paths and signal count
+  - `tests/unit/index.test.ts` now validates `CircuitType.PrivateLink` enum behavior
+- Updated docs to include private link as a supported circuit:
+  - `README.md`
+  - `docs/api.md`
 
 ## [3.2.1] - 2026-02-26
 

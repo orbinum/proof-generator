@@ -52,11 +52,12 @@ console.log('Signals:', result.publicSignals); // ['0x...', ...]
 
 ## Supported Circuits
 
-| Circuit    | Use Case                             |
-| ---------- | ------------------------------------ |
-| Unshield   | Withdraw from pool to public address |
-| Transfer   | Private-to-private transfer          |
-| Disclosure | Selective revelation                 |
+| Circuit     | Use Case                                         |
+| ----------- | ------------------------------------------------ |
+| Unshield    | Withdraw from pool to public address             |
+| Transfer    | Private-to-private transfer                      |
+| Disclosure  | Selective revelation                             |
+| PrivateLink | Privacy-preserving cross-chain identity dispatch |
 
 ## Related Packages
 

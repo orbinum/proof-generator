@@ -14,18 +14,21 @@ describe('index.ts - Unit Tests', () => {
       expect(CircuitType.Unshield).toBeDefined();
       expect(CircuitType.Transfer).toBeDefined();
       expect(CircuitType.Disclosure).toBeDefined();
+      expect(CircuitType.PrivateLink).toBeDefined();
     });
 
     it('should have string values', () => {
       expect(typeof CircuitType.Unshield).toBe('string');
       expect(typeof CircuitType.Transfer).toBe('string');
       expect(typeof CircuitType.Disclosure).toBe('string');
+      expect(typeof CircuitType.PrivateLink).toBe('string');
     });
 
     it('should have lowercase circuit names', () => {
       expect(CircuitType.Unshield).toBe('unshield');
       expect(CircuitType.Transfer).toBe('transfer');
       expect(CircuitType.Disclosure).toBe('disclosure');
+      expect(CircuitType.PrivateLink).toBe('private_link');
     });
   });
 

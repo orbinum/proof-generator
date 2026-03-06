@@ -7,6 +7,7 @@ export enum CircuitType {
   Unshield = 'unshield',
   Transfer = 'transfer',
   Disclosure = 'disclosure',
+  PrivateLink = 'private_link',
 }
 
 /** Circuit input value types (supports nested arrays for 2D inputs) */
