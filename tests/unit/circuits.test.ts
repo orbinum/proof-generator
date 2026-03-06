@@ -42,6 +42,17 @@ describe('circuits.ts - Unit Tests', () => {
       expect(config.provingKeyPath).toBe('disclosure_pk.ark');
       expect(config.expectedPublicSignals).toBe(4);
     });
+
+    it('should return config for PrivateLink circuit', () => {
+      const config = getCircuitConfig(CircuitType.PrivateLink);
+
+      expect(config).toBeDefined();
+      expect(config.name).toBe('private_link');
+      expect(config.wasmPath).toBe('private_link.wasm');
+      expect(config.zkeyPath).toBe('private_link_pk.zkey');
+      expect(config.provingKeyPath).toBe('private_link_pk.ark');
+      expect(config.expectedPublicSignals).toBe(2);
+    });
   });
 
   describe('NodeArtifactProvider', () => {
