@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-03-07
+
+### Changed
+
+- **`@orbinum/circuits` bumped** from `^0.3.1` to `^0.4.1` — includes the `private_link` circuit with an updated trusted setup, `.ark` artifacts for all proving keys, and the new `check-artifacts` validation script.
+
 ## [3.3.0] - 2026-03-06
 
 ### Added
