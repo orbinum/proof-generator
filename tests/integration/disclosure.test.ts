@@ -37,10 +37,6 @@ describe('Integration: Disclosure Proof Generation', () => {
     const commitment = poseidon([noteValue, assetId, ownerPubkey, blinding]);
     const commitmentBigInt = F.toObject(commitment);
 
-    // Compute viewing_key = Poseidon(owner_pubkey)
-    const viewingKey = poseidon([ownerPubkey]);
-    const viewingKeyBigInt = F.toObject(viewingKey);
-
     // Compute revealed_owner_hash = Poseidon(owner_pubkey) for this test
     const revealedOwnerHash = poseidon([ownerPubkey]);
     const revealedOwnerHashBigInt = F.toObject(revealedOwnerHash);
@@ -57,7 +53,6 @@ describe('Integration: Disclosure Proof Generation', () => {
       asset_id: assetId.toString(),
       owner_pubkey: ownerPubkey.toString(),
       blinding: blinding.toString(),
-      viewing_key: viewingKeyBigInt.toString(),
       // Disclosure masks
       disclose_value: '0', // 0 = no revelar
       disclose_asset_id: '0', // 0 = no revelar
