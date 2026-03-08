@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.2] - 2026-03-08
+
+### Changed
+
+- **`@orbinum/circuits` bumped** from `^0.4.1` to `^0.4.2` — removes redundant
+  `viewing_key` private input from the disclosure circuit (ownership is already
+  proven by the commitment constraint) and normalizes all circuit comments to
+  English.
+- **`src/disclosure.ts`** — removed `viewing_key` from the witness input object
+  passed to snarkjs; the signal no longer exists in the circuit. The
+  `Poseidon(owner_pubkey)` value is still computed internally and used as
+  `revealed_owner_hash` when `mask.discloseOwner` is `true`.
+
+### Removed
+
+- **`viewing_key` witness signal** from `buildCircuitInputs()` in
+  `src/disclosure.ts` — was `Poseidon(owner_pubkey)`, now inlined into
+  `revealed_owner_hash` only.
+- **Unit test** `should include viewing_key = mocked Poseidon(owner_pubkey)` in
+  `tests/unit/disclosure.test.ts` — no longer applicable.
+- **`viewing_key` field** from the raw inputs object in
+  `tests/integration/disclosure.test.ts`.
+
 ## [3.3.1] - 2026-03-07
 
 ### Changed

@@ -60,7 +60,6 @@ async function buildCircuitInputs(
     asset_id: u64ToFieldStr(assetId),
     owner_pubkey: ownerPubkey.toString(),
     blinding: blinding.toString(),
-    viewing_key: viewingKey.toString(),
     disclose_value: mask.discloseValue ? '1' : '0',
     disclose_asset_id: mask.discloseAssetId ? '1' : '0',
     disclose_owner: mask.discloseOwner ? '1' : '0',

@@ -8,7 +8,7 @@
  *   - Mock `../../src/index` (generateProof) to return crafted public signals.
  *   - Test everything the disclosure orchestrator does:
  *       1. Mask validation (all-false must throw)
- *       2. Circuit inputs built with correct values and viewing_key
+ *       2. Circuit inputs built with correct values
  *       3. `revealedData` decoded correctly from public signals for all mask combos
  *       4. Proof / publicSignals forwarded as-is
  *       5. Helper round-trips: bigIntToBytes32 ↔ bytes32ToBigInt
@@ -212,19 +212,6 @@ describe('generateDisclosureProof - circuit inputs', () => {
 
     const [, inputs] = mockGenerateProof.mock.calls.at(-1)!;
     expect(inputs.commitment).toBe(COMMITMENT.toString());
-  });
-
-  it('should include viewing_key = mocked Poseidon(owner_pubkey)', async () => {
-    const mask: DisclosureMask = {
-      discloseValue: true,
-      discloseAssetId: false,
-      discloseOwner: false,
-    };
-
-    await generateDisclosureProof(NOTE_VALUE, OWNER_PUBKEY, BLINDING, ASSET_ID, COMMITMENT, mask);
-
-    const [, inputs] = mockGenerateProof.mock.calls.at(-1)!;
-    expect(inputs.viewing_key).toBe(MOCK_VIEWING_KEY.toString());
   });
 
   it('should set disclose_value=1 when mask.discloseValue is true', async () => {
