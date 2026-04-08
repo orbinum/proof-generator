@@ -1,6 +1,6 @@
 {
   "name": "@orbinum/proof-generator",
-  "version": "3.3.2",
+  "version": "3.5.0",
   "description": "ZK-SNARK proof generator for Orbinum. Combines snarkjs (witness) with arkworks WASM (proof generation) to produce 128-byte Groth16 proofs.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,19 +17,16 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:verbose": "jest --verbose",
-    "test:shield": "jest shielded.test.ts",
-    "test:unshield": "jest unshield.test.ts",
-    "test:transfer": "jest transfer.test.ts",
-    "test:disclosure": "jest disclosure.test.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "typecheck": "tsc --project tsconfig.test.json --noEmit",
     "lint": "tsc --project tsconfig.test.json --noEmit",
-    "prepare": "husky",
-    "prepublishOnly": "npm run build && npm run lint && npm test",
-    "clean": "rm -rf dist node_modules package-lock.json"
+    "check": "pnpm lint && pnpm typecheck && pnpm format:check && pnpm build && pnpm test",
+    "prepublishOnly": "pnpm check",
+    "clean": "rm -rf dist node_modules package-lock.json pnpm-lock.yaml"
   },
   "keywords": [
     "zksnark",
@@ -42,24 +39,22 @@
     "orbinum"
   ],
   "dependencies": {
-    "@orbinum/circuits": "^0.4.2",
-    "@orbinum/groth16-proofs": "^2.0.0",
-    "snarkjs": "0.7.5"
+    "@orbinum/circuits": "0.4.4",
+    "@orbinum/groth16-proofs": "3.0.0",
+    "snarkjs": "0.7.6"
   },
   "devDependencies": {
     "@types/circomlibjs": "0.1.6",
-    "@types/jest": "29.5.14",
-    "@types/node": "22.10.5",
+    "@types/node": "25.5.2",
     "@types/snarkjs": "0.7.9",
+    "@vitest/coverage-v8": "4.1.3",
     "circomlibjs": "0.1.7",
-    "husky": "9.1.7",
-    "jest": "29.7.0",
-    "lint-staged": "15.2.11",
-    "prettier": "3.4.2",
-    "ts-jest": "29.2.5",
-    "typescript": "^5.7.3"
+    "prettier": "3.8.1",
+    "typescript": "6.0.2",
+    "vitest": "4.1.3"
   },
   "engines": {
     "node": ">=22.0.0"
-  }
+  },
+  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be"
 }

@@ -27,6 +27,7 @@ npm install @orbinum/proof-generator
 ```typescript
 import { generateProof, CircuitType } from '@orbinum/proof-generator';
 
+// Default backend (snarkjs) — fastest
 const result = await generateProof(CircuitType.Unshield, {
   merkle_root: '0x...',
   nullifier: '0x...',
@@ -34,8 +35,14 @@ const result = await generateProof(CircuitType.Unshield, {
   // ... circuit-specific inputs
 });
 
-console.log('Proof:', result.proof); // 0x... (128 bytes)
-console.log('Signals:', result.publicSignals); // ['0x...', ...]
+// Arkworks backend — smaller artifacts
+const result2 = await generateProof(CircuitType.Transfer, inputs, {
+  backend: 'arkworks',
+});
+
+console.log(result.proof);         // '0xabcd...' (128-byte hex)
+console.log(result.publicSignals); // ['0x...', ...]
+console.log(result.circuitType);   // CircuitType.Unshield
 ```
 
 ## Core API
@@ -49,21 +56,28 @@ Generates a **128-byte Groth16 proof** from circuit inputs.
 ```typescript
 await generateProof(
   circuitType: CircuitType,
-  inputs: Record<string, string | number | bigint>,
-  options?: {
-    verbose?: boolean;          // Log progress (default: false)
-    validateArtifacts?: boolean; // Verify files exist (default: true)
-  }
+  inputs: CircuitInputs,
+  options?: GenerateOptions
 )
 ```
 
-**Returns:**
+**`GenerateOptions`:**
 
 ```typescript
-{
-  proof: string;              // 128-byte hex proof (0x...)
-  publicSignals: string[];    // Public signals (4-5 elements, hex encoded)
-  circuitType: string;        // Circuit identifier (lowercase)
+interface GenerateOptions {
+  verbose?:  boolean;                 // Log progress to console (default: false)
+  provider?: ArtifactProvider;        // Override artifact source (default: auto-detected)
+  backend?:  'snarkjs' | 'arkworks'; // Proof backend (default: 'snarkjs')
+}
+```
+
+**Returns:** `Promise<ProofResult>`
+
+```typescript
+interface ProofResult {
+  proof: string;              // 128-byte hex proof (0x-prefixed)
+  publicSignals: string[];    // Public signals (hex-encoded, 0x-prefixed)
+  circuitType: CircuitType;   // Circuit used
 }
 ```
 
@@ -82,7 +96,7 @@ const result = await generateProof(
     path_elements: ['0x...', '0x...'],
     path_index: '0',
   },
-  { verbose: true }
+  { verbose: true, backend: 'snarkjs' }
 );
 
 console.log(result.proof);
@@ -91,58 +105,68 @@ console.log(result.publicSignals);
 // ['0x...', '0x...', '0x...', '0x...', '0x...']
 ```
 
-### `calculateWitness(inputs, wasmPath)`
+---
 
-**Advanced use only.** Calculate witness array separately from proof generation.
+### `generateDisclosureProof(value, ownerPubkey, blinding, assetId, commitment, mask, options?)`
 
-Most users should use `generateProof()` instead, which handles witness calculation internally.
+High-level helper for the `Disclosure` circuit. Handles Poseidon key derivation
+(`viewing_key = Poseidon(ownerPubkey)`) and returns human-readable revealed data.
 
 **Parameters:**
 
 ```typescript
-const witness = await calculateWitness(
-  inputs: Record<string, string | number | bigint>,
-  wasmPath: string  // Path to circuit WASM file
+await generateDisclosureProof(
+  value: bigint,           // Note value (u64)
+  ownerPubkey: bigint,     // Owner public key (BN254 scalar)
+  blinding: bigint,        // Blinding factor
+  assetId: bigint,         // Asset ID (u32)
+  commitment: bigint,      // Note commitment
+  mask: DisclosureMask,    // Which fields to disclose
+  options?: GenerateOptions
 )
 ```
 
-**Returns:**
+**`DisclosureMask`:**
 
 ```typescript
-string[]  // Witness array (decimal strings)
-```
-
-**Example:**
-
-```typescript
-import { calculateWitness } from '@orbinum/proof-generator';
-import { getCircuitConfig, CircuitType } from '@orbinum/proof-generator';
-
-const config = getCircuitConfig(CircuitType.Unshield);
-const witness = await calculateWitness(
-  { merkle_root: '0x...', nullifier: '0x...' /* ... */ },
-  config.wasmPath
-);
-```
-
-### `isReady()`
-
-Check if circuit artifacts are available for proof generation.
-
-**Returns:** `boolean` - `true` if artifacts exist, `false` otherwise
-
-**Example:**
-
-```typescript
-import { isReady } from '@orbinum/proof-generator';
-
-if (!isReady()) {
-  console.error('Circuit artifacts missing. Run: npm install');
-  process.exit(1);
+interface DisclosureMask {
+  discloseValue:   boolean; // Reveal note value
+  discloseAssetId: boolean; // Reveal asset ID
+  discloseOwner:   boolean; // Reveal Poseidon(ownerPubkey)
 }
+```
 
-// Safe to generate proofs
-await generateProof(CircuitType.Unshield, inputs);
+**Returns:** `Promise<DisclosureProofOutput>`
+
+```typescript
+interface DisclosureProofOutput {
+  proof: string;            // 128-byte compressed proof (0x-prefixed)
+  publicSignals: string[];  // [commitment, revealed_value, revealed_asset_id, revealed_owner_hash]
+  revealedData: {
+    value?: string;         // Decimal string, or undefined if not disclosed
+    assetId?: number;       // Number, or undefined if not disclosed
+    ownerHash?: string;     // 0x-prefixed hex, or undefined if not disclosed
+  };
+}
+```
+
+**Example:**
+
+```typescript
+import { generateDisclosureProof } from '@orbinum/proof-generator';
+
+const result = await generateDisclosureProof(
+  1000n,        // value
+  ownerPubkey,  // bigint
+  blinding,     // bigint
+  42n,          // assetId
+  commitment,   // bigint
+  { discloseValue: true, discloseAssetId: true, discloseOwner: false }
+);
+
+console.log(result.revealedData.value);    // '1000'
+console.log(result.revealedData.assetId);  // 42
+console.log(result.revealedData.ownerHash); // undefined (not disclosed)
 ```
 
 ## Enumerations
@@ -171,58 +195,90 @@ await generateProof(CircuitType.Disclosure, inputs);
 await generateProof(CircuitType.PrivateLink, inputs);
 ```
 
+## Providers
+
+### Auto-detection
+
+By default the library detects the runtime environment and picks the appropriate provider:
+
+- **Node.js** → `NodeArtifactProvider` (reads from `node_modules/@orbinum/circuits` via `fs`)
+- **Browser / Web Worker** (`window` or `self` defined) → `WebArtifactProvider` (fetches over HTTP)
+
+### `NodeArtifactProvider`
+
+```typescript
+import { NodeArtifactProvider } from '@orbinum/proof-generator';
+
+const provider = new NodeArtifactProvider();
+// optional: pass a custom path to @orbinum/circuits package root
+const custom = new NodeArtifactProvider('/path/to/circuits');
+
+const result = await generateProof(CircuitType.Unshield, inputs, { provider });
+```
+
+### `WebArtifactProvider`
+
+Fetches artifacts over HTTP. Suitable for browsers, React Native, or any environment without a local filesystem.
+
+```typescript
+import { WebArtifactProvider } from '@orbinum/proof-generator';
+
+const provider = new WebArtifactProvider({
+  baseUrl: 'https://cdn.example.com/circuits',
+  // optional per-circuit URL overrides:
+  // wasmUrls?: Partial<Record<CircuitType, string>>
+  // zkeyUrls?: Partial<Record<CircuitType, string>>
+  // provingKeyUrls?: Partial<Record<CircuitType, string>>
+});
+
+const result = await generateProof(CircuitType.Unshield, inputs, { provider });
+```
+
+### `ArtifactProvider` Interface
+
+Implement this interface to supply artifacts from any source (IPFS, S3, embedded buffers, etc.):
+
+```typescript
+interface ArtifactProvider {
+  getCircuitWasm(circuitType: CircuitType): Promise<Uint8Array | string>;
+  getCircuitZkey(circuitType: CircuitType): Promise<Uint8Array | string>;
+  getCircuitProvingKey?(circuitType: CircuitType): Promise<Uint8Array>; // required for arkworks backend
+}
+```
+
 ## Error Handling
 
-### Error Types
+All errors extend `ProofGeneratorError`, which carries a machine-readable `code` string.
 
 ```typescript
 import {
-  CircuitNotFoundError,
+  ProofGeneratorError,
+  WitnessCalculationError,
   ProofGenerationError,
+  CircuitNotFoundError,
   InvalidInputsError,
 } from '@orbinum/proof-generator';
 ```
 
-### `InvalidInputsError`
+| Error class | `code` | Thrown when |
+| --- | --- | --- |
+| `InvalidInputsError` | `INVALID_INPUTS` | Missing or malformed circuit inputs |
+| `CircuitNotFoundError` | `CIRCUIT_NOT_FOUND` | Circuit artifacts not found |
+| `WitnessCalculationError` | `WITNESS_CALCULATION_FAILED` | snarkjs witness step fails |
+| `ProofGenerationError` | `PROOF_GENERATION_FAILED` | Backend proof step fails |
 
-Thrown when circuit inputs are invalid (missing required fields, null values, wrong types).
+**Example:**
 
 ```typescript
 try {
-  await generateProof(CircuitType.Unshield, {
-    merkle_root: '0x...', // missing other required inputs
-  });
+  await generateProof(CircuitType.Unshield, inputs);
 } catch (error) {
   if (error instanceof InvalidInputsError) {
-    console.error('Invalid inputs:', error.message);
-  }
-}
-```
-
-### `CircuitNotFoundError`
-
-Thrown when circuit artifacts are missing (WASM file not found).
-
-```typescript
-try {
-  await generateProof(CircuitType.Unshield, inputs);
-} catch (error) {
-  if (error instanceof CircuitNotFoundError) {
-    console.error('Circuit artifacts missing. Run: npm install');
-  }
-}
-```
-
-### `ProofGenerationError`
-
-Thrown during proof generation (witness calculation or WASM proof generation).
-
-```typescript
-try {
-  await generateProof(CircuitType.Unshield, inputs);
-} catch (error) {
-  if (error instanceof ProofGenerationError) {
-    console.error('Proof generation failed:', error.message);
+    console.error('Bad inputs:', error.message); // error.code === 'INVALID_INPUTS'
+  } else if (error instanceof CircuitNotFoundError) {
+    console.error('Missing artifacts. Run: pnpm install');
+  } else if (error instanceof ProofGeneratorError) {
+    console.error(`Proof failed [${error.code}]:`, error.message);
   }
 }
 ```
@@ -253,21 +309,35 @@ All public signals returned as **0x-prefixed hex strings**:
 
 ## Performance
 
-### Benchmarks
+See [docs/backends.md](backends.md) for a full benchmark analysis.
 
-| Operation                    | Time        |
-| ---------------------------- | ----------- |
-| Witness generation (snarkjs) | ~500ms      |
-| Proof generation (WASM)      | ~5-8s       |
-| **Total**                    | **~6-8.5s** |
-| Module load (cold start)     | ~1s         |
-| Module load (cached)         | ~0ms        |
+### By backend
 
-### Memory Usage
+| Circuit | snarkjs | arkworks |
+| --- | --- | --- |
+| Unshield | ~1.3 s | ~7 s |
+| Transfer | ~4.7 s | ~20 s |
+| Disclosure | ~1.1 s | ~5 s |
+| PrivateLink | ~0.7 s | ~3 s |
 
-- Peak: ~2GB during proof generation
-- WASM module size: ~5MB
-- Circuits total: ~20-50MB resident
+- **snarkjs** — default, fastest, uses `.zkey` proving keys
+- **arkworks** — 2–3× smaller proof artifacts, uses `.ark` proving keys
+
+### WASM initialization
+
+The arkworks WASM module is initialized lazily on first use. Pre-initialize for latency-sensitive apps:
+
+```typescript
+import { initWasm } from '@orbinum/proof-generator';
+
+await initWasm(); // call once at startup
+```
+
+### Memory
+
+- Peak: ~2 GB during proof generation
+- WASM module: ~5 MB
+- Circuit artifacts: ~20–50 MB total
 
 ## Troubleshooting
 
@@ -276,8 +346,8 @@ All public signals returned as **0x-prefixed hex strings**:
 Dependency not installed:
 
 ```bash
-rm -rf node_modules package-lock.json
-npm install
+rm -rf node_modules pnpm-lock.yaml
+pnpm install
 ```
 
 ### "Out of memory" error
@@ -364,4 +434,6 @@ For faster proofs, ensure:
 
 ---
 
-**See [docs/development.md](development.md) for development setup and architecture details.**
+**See [docs/backends.md](backends.md) for backend architecture and benchmark analysis.**  
+**See [docs/usage.md](usage.md) for usage examples with both backends.**  
+**See [docs/development.md](development.md) for development setup and contributing guide.**

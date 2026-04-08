@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-04-08
+
+### Added
+
+- **`src/circuits/types.ts`** — circuit types extracted to their own module: `CircuitType`, `CircuitInputValue`, `CircuitInputs`, `ProofResult`, `CircuitConfig`.
+- **`src/wasm/`** — universal WASM loader (`initWasm`, `compressSnarkjsProofWasm`, `generateProofFromWitnessWasm`) supporting Node.js (reads `.wasm` from disk) and browser (fetches from CDN).
+- **`src/wasm/types.ts`** — `WitnessData` type.
+- **`src/errors/index.ts`** — error hierarchy: `ProofGeneratorError`, `WitnessCalculationError`, `ProofGenerationError`, `CircuitNotFoundError`, `InvalidInputsError`.
+- **`src/disclosure/types.ts`** — `DisclosureMask`, `DisclosureProofOutput`.
+- **`src/generate/types.ts`** — `GenerateOptions` interface (public).
+- **`src/generate/provider.ts`** — `resolveProvider()` (auto-detects Node.js vs browser/web worker).
+- **`src/generate/backends/snarkjs.ts`** — `runSnarkjsBackend()`.
+- **`src/generate/backends/arkworks.ts`** — `runArkworksBackend()` using `@orbinum/groth16-proofs` WASM.
+- **`src/providers/`** — `NodeArtifactProvider`, `WebArtifactProvider` (accepts `WebProviderOptions`), `ArtifactProvider` interface.
+- **`src/utils/`** — `encoding.ts`, `formatting.ts`, `validation.ts`.
+- **`scripts/benchmark.ts`** — full benchmark with `PhaseResult` / `benchPhased()` and PHASE BREAKDOWN output (Load / Witness / Serialize / Prove / Compress per circuit per backend).
+- **New docs**: `docs/backends.md`, `docs/usage.md`.
+- **New tests**: `tests/generate/`, `tests/disclosure/`, `tests/errors/`, `tests/circuits/`, `tests/providers/`, `tests/utils/`, `tests/wasm/` — full coverage for all new modules.
+
+### Changed
+
+- **`@orbinum/groth16-proofs`** bumped `2.1.0` → `3.0.0`.
+  - `generate_proof_from_witness` now requires explicit `num_public_signals` — bug fix for heuristic that produced wrong public signal counts.
+  - Return type changed from `String` to typed `ProofError` enum.
+  - New exports: `from_decimal_str<F>`, `from_hex_le<F>`, `prove_from_witness`, `compress_snarkjs_proof`.
+  - Benchmark verified: no performance regression.
+- **`@orbinum/circuits`** bumped `^0.4.1` → `0.4.4`.
+- **`src/generate.ts`** (flat file) refactored into `src/generate/` with orchestrator, provider resolution, and two isolated backends.
+- **`src/disclosure.ts`** converted to `src/disclosure/` directory.
+- **`src/errors.ts`** converted to `src/errors/` directory.
+- **`src/index.ts`** reorganised into explicit sections: Core API, Types, Circuits, Providers, Utils, WASM.
+- Migrated from **Jest** to **Vitest** (`vitest.config.ts`).
+- Migrated from **npm** / `package-lock.json` to **pnpm**.
+- **`docs/api.md`** updated: `generateProof` signature reflects `GenerateOptions`; full error hierarchy; performance tables with per-circuit / per-backend times.
+- **`docs/development.md`** updated: directory tree, pnpm, Vitest, architecture diagram, key source files.
+- **`README.md`** updated: real benchmark numbers and phase breakdown table.
+
+### Removed
+
+- **`src/types.ts`** — types distributed to their respective modules.
+- **`src/generate.ts`**, **`src/disclosure.ts`**, **`src/errors.ts`**, **`src/provider.ts`**, **`src/utils.ts`**, **`src/circuits.ts`**, **`src/wasm-loader.ts`** — replaced by directory-based modules.
+- **`jest.config.js`**, **`lint-staged.config.js`**, **`package-lock.json`**, **`.husky/pre-commit`** — replaced by Vitest + pnpm.
+- **`CircuitConfig.provingKeyPath`** — `.ark` path no longer exposed in the public interface.
+- Tests under `tests/unit/` and `tests/integration/` — reorganised into module-based directories.
+
+
+
+- **`CircuitConfig.provingKeyPath`** removed from the interface in `src/types.ts` — the `.ark` file path is no longer exposed.
+- Monolithic source files replaced: `src/circuits.ts`, `src/provider.ts`, `src/utils.ts`, `src/wasm-loader.ts`.
+- **Husky pre-commit hook** and **lint-staged** removed.
+
 ## [3.3.2] - 2026-03-08
 
 ### Changed
