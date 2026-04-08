@@ -10,60 +10,101 @@ Development setup, architecture, and testing for `@orbinum/proof-generator`.
 # Clone and install
 git clone https://github.com/orbinum/proof-generator.git
 cd proof-generator
-npm install
+pnpm install
 
-# Build TypeScript
-npm run build
+# Type-check (includes tests/)
+pnpm typecheck
 
 # Run tests
-npm test
+pnpm test
 ```
 
 ### Requirements
 
 - **Node.js**: ≥ 22.0.0
+- **pnpm**: ≥ 10.0.0
 - **Git**: For version control
-- **npm**: ≥ 9.0.0
 
 ## Project Structure
 
 ```
 proof-generator/
 ├── src/
-│   ├── index.ts              Main API export point
-│   ├── wasm-loader.ts        WASM module initialization (arkworks)
-│   ├── witness.ts            snarkjs integration (witness calculation)
-│   ├── circuits.ts           Circuit configuration and validation
-│   ├── types.ts              TypeScript type definitions
-│   └── utils.ts              Validation and formatting utilities
+│   ├── index.ts                   Public API barrel (no logic)
+│   │
+│   ├── generate/                  Proof orchestration
+│   │   ├── index.ts               generateProof() entry point
+│   │   ├── types.ts               GenerateOptions interface
+│   │   ├── provider.ts            resolveProvider() — auto-detects environment
+│   │   └── backends/
+│   │       ├── snarkjs.ts         runSnarkjsBackend()
+│   │       └── arkworks.ts        runArkworksBackend()
+│   │
+│   ├── disclosure/                Selective disclosure helpers
+│   │   ├── index.ts               generateDisclosureProof()
+│   │   └── types.ts               DisclosureMask, DisclosureProofOutput
+│   │
+│   ├── circuits/                  Circuit configuration
+│   │   ├── config.ts              getCircuitConfig()
+│   │   ├── index.ts               Re-exports
+│   │   └── types.ts               CircuitType, CircuitInputs, ProofResult, CircuitConfig
+│   │
+│   ├── errors/
+│   │   └── index.ts               Error class hierarchy
+│   │
+│   ├── providers/                 Artifact providers
+│   │   ├── interface.ts           ArtifactProvider interface
+│   │   ├── node.ts                NodeArtifactProvider
+│   │   ├── web.ts                 WebArtifactProvider
+│   │   └── index.ts               Re-exports
+│   │
+│   ├── wasm/                      WASM module management
+│   │   ├── index.ts               initWasm, compressSnarkjsProofWasm, generateProofFromWitnessWasm
+│   │   ├── loader.ts              Lazy-load groth16-proofs WASM
+│   │   └── types.ts               WitnessData
+│   │
+│   └── utils/
+│       ├── encoding.ts            bigIntToBytes32, hexSignalToBigInt, …
+│       ├── formatting.ts          normalizeProofHex, formatPublicSignalsArray, …
+│       ├── validation.ts          validateInputs, validatePublicSignals, validateProofSize
+│       └── index.ts               Re-exports
 │
-├── tests/
-│   ├── unit/                 Unit tests (55 tests)
-│   │   ├── circuits.test.ts  Circuit configuration tests (13 tests)
-│   │   ├── index.test.ts     API exports and error types (18 tests)
-│   │   └── utils.test.ts     Utility functions tests (24 tests)
-│   └── integration/          Integration tests (9 tests)
-│       ├── unshield.test.ts  Unshield proof generation (4 tests)
-│       ├── transfer.test.ts  Transfer proof generation (4 tests)
-│       └── disclosure.test.ts Disclosure proof generation (4 tests)
+├── tests/                         Mirrors src/ structure
+│   ├── generate/
+│   │   ├── index.test.ts          generateProof() — 15 tests
+│   │   └── provider.test.ts       resolveProvider() — 4 tests
+│   ├── disclosure/
+│   │   └── index.test.ts          generateDisclosureProof() — 9 tests
+│   ├── errors/
+│   │   └── index.test.ts          Error class hierarchy — 11 tests
+│   ├── circuits/
+│   │   └── config.test.ts         Circuit config resolution
+│   ├── providers/
+│   │   ├── node.test.ts           NodeArtifactProvider
+│   │   └── web.test.ts            WebArtifactProvider
+│   ├── utils/
+│   │   ├── encoding.test.ts
+│   │   ├── formatting.test.ts
+│   │   └── validation.test.ts
+│   ├── wasm/
+│   │   └── loader.test.ts
+│   └── generate.test.ts           Integration: real proof generation (all 4 circuits)
+│
+├── scripts/
+│   ├── benchmark.ts               Full proof benchmark (all circuits × backends)
+│   └── test-ark-backend.ts        arkworks backend smoke test
 │
 ├── docs/
-│   ├── api.md                Complete API reference
-│   └── development.md        This file
+│   ├── api.md                     Complete API reference
+│   ├── backends.md                Backend comparison + benchmarks
+│   ├── development.md             This file
+│   └── usage.md                   Usage guide
 │
-├── .github/
-│   └── workflows/            GitHub Actions CI/CD
-│
-├── .husky/                   Pre-commit hook configuration
-├── dist/                     Compiled JavaScript (build output)
-├── node_modules/
-│   ├── @orbinum/circuits/    Circuit artifacts (npm package)
-│   └── @orbinum/groth16-proofs/ Proof generation WASM (npm package)
-│
-├── jest.config.js            Jest test configuration
-├── tsconfig.json             TypeScript configuration
-├── package.json              Dependencies and scripts
-└── README.md                 Project overview
+├── tsconfig.json                  Production TypeScript config
+├── tsconfig.test.json             Test TypeScript config (includes tests/)
+├── vitest.config.ts               Vitest configuration
+├── package.json                   Dependencies and scripts
+└── README.md                      Project overview
 ```
 
 ## Development Workflow
@@ -71,205 +112,187 @@ proof-generator/
 ### Build
 
 ```bash
-npm run build
+pnpm build
 ```
 
-Compiles TypeScript to JavaScript:
+Compiles TypeScript to `dist/`:
 
 - Source: `src/**/*.ts`
 - Output: `dist/**/*.js`
-- Target: ES2020, CommonJS modules
+- Target: ES2022, CommonJS modules
 
 ### Testing
 
 ```bash
 # Run all tests
-npm test
+pnpm test
 
 # Watch mode (rerun on changes)
-npm run test:watch
-
-# Single test file
-npm test -- unshield.test.ts
+pnpm test:watch
 
 # With coverage
-npm test -- --coverage
+pnpm test:coverage
 
-# Verbose output
-npm test -- --verbose
+# Single file
+pnpm test tests/generate/index.test.ts
 ```
 
-**Test Setup:**
+**Test setup:**
 
-- Framework: Jest 29.7.0
-- TypeScript: ts-jest 29.2.5
-- Uses real WASM modules
-- Uses real proving keys from groth16-proofs
-- No mocks - integration tests only
+- Framework: **Vitest 4.1.3**
+- TypeScript: native support (no ts-jest)
+- External modules (`snarkjs`, `@orbinum/groth16-proofs`, `circomlibjs`) are mocked in unit tests
+- `tests/generate.test.ts` runs real proof generation (integration)
 
 ### Code Formatting
 
 ```bash
 # Format all TypeScript
-npm run format
+pnpm format
 
 # Check formatting (no changes)
-npm run format:check
+pnpm format:check
 
-# Type checking
-npm run lint
-
-# Combined check (before commit)
-npm run format && npm run lint
+# Type checking (includes tests/)
+pnpm typecheck
 ```
 
 **Tools:**
 
-- Formatter: Prettier 3.4.2
-- Linter: TypeScript compiler (tsc)
+- Formatter: Prettier 3.8.1
+- Type checker: TypeScript compiler (tsc)
+
+### Full pre-publish check
+
+```bash
+pnpm check
+```
+
+Runs: lint → typecheck → format:check → build → tests.
 
 ### Clean Rebuild
 
 ```bash
-npm run clean      # Remove build artifacts and node_modules
-npm install        # Reinstall everything
-npm run build      # Rebuild
-```
-
-## Pre-commit Hooks
-
-Uses **Husky 9.1.7** + **lint-staged 15.2.11**:
-
-Automatically runs on `git commit`:
-
-1. Format TypeScript files
-2. Validate types with tsc
-3. Ensure no syntax errors
-
-**Configuration:** `.husky/pre-commit`
-
-**Skip hooks (if needed):**
-
-```bash
-git commit --no-verify
+pnpm clean      # Remove dist, node_modules, lockfile
+pnpm install    # Reinstall everything
+pnpm build      # Rebuild
 ```
 
 ## Key Source Files
 
-### `src/wasm-loader.ts`
+### `src/generate/index.ts`
 
-Manages WASM module initialization (lazy loading).
-
-```typescript
-export async function initWasm(): Promise<void> {
-  // Idempotent: Only initializes once
-  // Dynamically imports WASM module from @orbinum/groth16-proofs
-  // Works identically in Node.js and browsers
-}
-
-export async function compressSnarkjsProofWasm(proof: SnarkjsProofLike): Promise<string> {
-  // Compress snarkjs proof to arkworks 128-byte format
-}
-```
-
-**Key Design:**
-
-- Lazy initialization (on first use)
-- Universal environment support (Node.js, Browser, Electron, Tauri)
-- Dynamic imports with environment-specific initialization
-- Auto-initialization on first proof compression call
-
-### `src/witness.ts`
-
-snarkjs integration for witness calculation.
-
-```typescript
-export async function calculateWitness(
-  inputs: Record<string, any>,
-  wasmPath: string
-): Promise<string[]> {
-  // Uses snarkjs wtns functions
-  // Returns witness array (11,808 elements)
-}
-```
-
-### `src/index.ts`
-
-Main public API.
+Orchestrator for all proof generation. Validates inputs, resolves provider, dispatches to backend.
 
 ```typescript
 export async function generateProof(
   circuitType: CircuitType,
   inputs: CircuitInputs,
-  options?: GenerateProofOptions
-): Promise<ProofResult>;
+  options: GenerateOptions = {}
+): Promise<ProofResult>
+```
 
-export { calculateWitness } from './witness';
-export { isReady } from './utils';
-export { CircuitType } from './types';
-export * from './types'; // All type exports
+Flow:
+1. `validateInputs(inputs)` — throws `InvalidInputsError` on bad inputs
+2. `resolveProvider(options.provider)` — auto-detect or use override
+3. `getCircuitConfig(circuitType)` — resolve artifact paths
+4. `runSnarkjsBackend(...)` or `runArkworksBackend(...)` depending on `options.backend`
+5. `validatePublicSignals(...)` — throws `ProofGenerationError` on invalid output
+
+### `src/generate/provider.ts`
+
+Auto-detects runtime environment and returns the default provider.
+
+```typescript
+export function resolveProvider(override?: ArtifactProvider): ArtifactProvider {
+  if (override) return override;
+  if (typeof window !== 'undefined' || typeof self !== 'undefined')
+    return new WebArtifactProvider(...);
+  return new NodeArtifactProvider();
+}
+```
+
+### `src/generate/backends/snarkjs.ts`
+
+```
+provider.getCircuitWasm + getCircuitZkey
+  → snarkjs.groth16.fullProve(inputs, wasm, zkey)
+  → compressSnarkjsProofWasm(proof)    // 128-byte compression
+  → validateProofSize
+```
+
+### `src/generate/backends/arkworks.ts`
+
+```
+provider.getCircuitWasm + getCircuitProvingKey (.ark)
+  → snarkjs.wtns.calculate(inputs, wasm)
+  → snarkjs.wtns.exportJson(wtns)
+  → generateProofFromWitnessWasm(witness, provingKey)
+```
+
+### `src/disclosure/index.ts`
+
+Uses `circomlibjs.buildPoseidon` to compute `viewing_key = Poseidon(ownerPubkey)`, then calls
+`generateProof(CircuitType.Disclosure, ...)` and maps raw signals to `DisclosureProofOutput.revealedData`.
+
+### `src/errors/index.ts`
+
+Error hierarchy:
+
+```
+ProofGeneratorError (base, has .code)
+├── WitnessCalculationError  (code: 'WITNESS_CALCULATION_FAILED')
+├── ProofGenerationError     (code: 'PROOF_GENERATION_FAILED')
+├── CircuitNotFoundError     (code: 'CIRCUIT_NOT_FOUND')
+└── InvalidInputsError       (code: 'INVALID_INPUTS')
+```
+
+### `src/wasm/index.ts`
+
+Manages lifecycle of the `@orbinum/groth16-proofs` WASM module. Lazy-initializes on first use; idempotent.
+
+```typescript
+export async function initWasm(): Promise<void>
+export async function compressSnarkjsProofWasm(proof): Promise<string>
+export async function generateProofFromWitnessWasm(witness, provingKey): Promise<{ proof, publicSignals }>
 ```
 
 ## Architecture Overview
 
-### Proof Generation Flow
+### Two-Backend Design
 
 ```
-User Input (JSON)
+User Input
     ↓
-[1] Validate inputs
-    ↓
-[2] Load circuit WASM (witness calculator)
-    ↓
-[3] snarkjs: Calculate witness (decimal format)
-    ↓ [OPTIMIZED: No conversion needed!]
-    ↓
-[4] Load proving key (arkworks format .ark)
-    ↓
-[5] Load groth16-proofs WASM (proof generation)
-    ↓
-[6] groth16-proofs: Convert decimal → field elements
-    ↓
-[7] arkworks: Generate 128-byte proof
-    ↓
-Output (proof + publicSignals)
+generateProof()
+    ↓ [validateInputs]
+    ↓ [resolveProvider]
+    ↓ [getCircuitConfig]
+    ├── backend: 'snarkjs' (default) ──────────────────────────────────▮
+    │   getCircuitWasm + getCircuitZkey                              │
+    │   → snarkjs.groth16.fullProve                                  │
+    │   → compressSnarkjsProofWasm (128-byte)                        │
+    │                                                                │
+    └── backend: 'arkworks' ────────────────────────────────────────▮
+        getCircuitWasm + getCircuitProvingKey (.ark)             │
+        → snarkjs.wtns.calculate → snarkjs.wtns.exportJson       │
+        → generateProofFromWitnessWasm (arkworks WASM)            │
+                                                                 ↓
+                             ProofResult { proof, publicSignals, circuitType }
 ```
 
 ### Module Integration
 
-- **snarkjs 0.7.5**: Witness calculation from Circom circuits
-  - Consumes: circuit WASM, inputs
-  - Produces: witness array (decimal strings - native format)
-- **groth16-proofs**: Groth16 proof generation (compiled WASM)
-  - Consumes: witness (decimal), proving key
-  - Internally converts: decimal → field elements (LE)
-  - Produces: 128-byte proof + public signals
-- **TypeScript wrapper**: Orchestrates the pipeline
-  - Handles paths, validation, error handling
-  - No witness format conversion needed ✅
-  - Same code everywhere
+- **snarkjs 0.7.6**: Witness calculation for all circuits; also the full prover in the `snarkjs` backend
+- **@orbinum/groth16-proofs 2.1.0**: Arkworks Groth16 WASM — proof generation in `arkworks` backend, and 128-byte compression for `snarkjs` backend
+- **circomlibjs 0.1.7**: Poseidon hash implementation — used exclusively in `src/disclosure/`
 
-### Data Types
+### Provider System
 
-**Circuit Inputs:**
-
-```typescript
-Record<string, string | number | bigint>;
 ```
-
-**Witness (Updated):**
-
-```typescript
-string[]  // 11,808 elements (decimal strings: "1", "12345", etc.)
-```
-
-**Proof Output:**
-
-```typescript
-{
-  proof: string,           // '0x...' (256 hex chars)
-  publicSignals: string[], // 4-5 elements, hex encoded
-}
+ArtifactProvider (interface)
+├── NodeArtifactProvider   — reads from node_modules/@orbinum/circuits via fs
+└── WebArtifactProvider    — fetches over HTTP (configurable base URL)
 ```
 
 ## Artifact Management
@@ -278,23 +301,23 @@ string[]  // 11,808 elements (decimal strings: "1", "12345", etc.)
 
 **Circuit artifacts are managed via npm packages:**
 
-1. **@orbinum/circuits** (v0.3.0+)
+1. **@orbinum/circuits** (0.4.4)
 
    - Circuit WASM files (witness calculators)
-   - Proving keys (.ark format for arkworks)
-   - Verification keys (.zkey format for snarkjs)
+   - Proving keys (`.ark` for arkworks backend)
+   - Verification keys (`.zkey` for snarkjs backend)
    - Installed automatically as dependency
 
-2. **@orbinum/groth16-proofs** (v2.0.0+)
-   - Precompiled WASM module (arkworks Groth16)
-   - Proof generation and compression
+2. **@orbinum/groth16-proofs** (2.1.0)
+   - Precompiled Arkworks Groth16 WASM
+   - Proof generation and 128-byte compression
    - Installed automatically as dependency
 
-**No manual downloads or postinstall scripts required!**
+**No manual downloads or postinstall scripts required.**
 
 ### Artifact Locations
 
-After `npm install`, artifacts are in `node_modules/`:
+After `pnpm install`, artifacts are in `node_modules/`:
 
 ```
 node_modules/
@@ -307,7 +330,10 @@ node_modules/
 │   ├── transfer_pk.zkey
 │   ├── disclosure.wasm
 │   ├── disclosure_pk.ark
-│   └── disclosure_pk.zkey
+│   ├── disclosure_pk.zkey
+│   ├── private_link.wasm
+│   ├── private_link_pk.ark
+│   └── private_link_pk.zkey
 └── @orbinum/groth16-proofs/
     ├── groth16_proofs_bg.wasm
     ├── groth16_proofs.js
@@ -316,131 +342,122 @@ node_modules/
 
 ### Version Management
 
-Update versions in `package.json`:
-
-```json
-{
-  "dependencies": {
-    "@orbinum/circuits": "^0.3.0",
-    "@orbinum/groth16-proofs": "^2.0.0"
-  }
-}
-```
-
-Then:
+Update versions in `package.json`, then:
 
 ```bash
-npm update
-npm install
+pnpm update
+pnpm install
 ```
 
 ## Testing Strategy
 
+**Framework:** Vitest 4.1.3  
+**Total:** 144 tests across 11 suites
+
 ### Test Organization
 
-**Two-tier test structure:**
+```
+tests/
+├── generate/
+│   ├── index.test.ts     (15 tests)  generateProof — mocked provider & backends
+│   └── provider.test.ts  ( 4 tests)  resolveProvider — environment detection
+├── disclosure/
+│   └── index.test.ts     ( 9 tests)  generateDisclosureProof — mocked Poseidon
+├── errors/
+│   └── index.test.ts     (11 tests)  Error hierarchy and .code values
+├── circuits/
+│   └── config.test.ts                Circuit config resolution
+├── providers/
+│   ├── node.test.ts                  NodeArtifactProvider
+│   └── web.test.ts                   WebArtifactProvider
+├── utils/
+│   ├── encoding.test.ts
+│   ├── formatting.test.ts
+│   └── validation.test.ts
+├── wasm/
+│   └── loader.test.ts
+└── generate.test.ts              Integration: real proof generation (all 4 circuits)
+```
 
-1. **Unit Tests** (`tests/unit/`): Fast, isolated component testing
+### Mocking Approach
 
-   - `circuits.test.ts` (13 tests): Circuit configuration resolution
-   - `index.test.ts` (18 tests): API exports, error types, isReady()
-   - `utils.test.ts` (24 tests): Validation and formatting utilities
+External dependencies are mocked with `vi.mock`:
 
-2. **Integration Tests** (`tests/integration/`): End-to-end proof generation
-   - `unshield.test.ts` (4 tests): Complete unshield proof flow
-   - `transfer.test.ts` (4 tests): Complete transfer proof flow
-   - `disclosure.test.ts` (4 tests): Complete disclosure proof flow
+- `snarkjs` — `groth16.fullProve`, `wtns.calculate`, `wtns.exportJson`
+- `@orbinum/groth16-proofs` — `generate_proof_from_witness`, `compress_snarkjs_proof`
+- `circomlibjs` — `buildPoseidon` returns `Object.assign(vi.fn(), { F: { toObject: vi.fn() } })`
 
-**Total: 64 tests (55 unit + 9 integration)**
+Providers return `Uint8Array` stubs in unit tests — no real artifacts required.
 
-### Test Structure
-
-**Unit Test Example:**
+### Unit Test Example
 
 ```typescript
-describe('circuits.ts - Unit Tests', () => {
-  test('should resolve circuit config from package', () => {
-    const config = getCircuitConfig(CircuitType.Unshield);
-    expect(config.wasmPath).toContain('unshield.wasm');
-    expect(config.zkeyPath).toContain('unshield_pk.zkey');
+describe('generateProof', () => {
+  it('should dispatch to snarkjs backend by default', async () => {
+    await generateProof(CircuitType.Unshield, validInputs);
+    expect(runSnarkjsBackend).toHaveBeenCalledOnce();
+    expect(runArkworksBackend).not.toHaveBeenCalled();
   });
 });
 ```
 
-**Integration Test Example:**
+### Integration Test Example
 
 ```typescript
-describe('Integration: Unshield Proof Generation', () => {
-  test('should generate valid proof for unshield', async () => {
+describe('Integration: real proofs', () => {
+  it('should generate valid unshield proof', async () => {
     const result = await generateProof(CircuitType.Unshield, inputs);
-    expect(result.proof).toBeDefined();
-    expect(result.proof.length).toBe(258); // 0x + 256 hex chars
-    expect(result.publicSignals.length).toBe(5);
+    expect(result.proof).toMatch(/^0x[0-9a-f]{256}$/);
+    expect(result.publicSignals).toHaveLength(5);
   });
 });
 ```
 
-### Test Coverage
-
-**Unit Tests:**
-
-- ✅ Circuit artifact path resolution
-- ✅ Configuration validation
-- ✅ Public API exports
-- ✅ Error class instantiation
-- ✅ Utility function behavior
-- ✅ Input validation and formatting
-
-**Integration Tests:**
-
-- ✅ Valid proof generation for all 3 circuits
-- ✅ Invalid input handling
-- ✅ Missing required fields detection
-- ✅ Null/undefined input rejection
-- ✅ Real WASM module integration
-- ✅ Real circuit artifacts usage
-
-**Run tests:**
+### Run Tests
 
 ```bash
-# All tests
-npm test
-
-# Unit tests only
-npm test -- tests/unit
-
-# Integration tests only
-npm test -- tests/integration
-
-# Specific test file
-npm test -- tests/unit/circuits.test.ts
+pnpm test                                # All 144 tests
+pnpm test tests/generate/               # Only generate suite
+pnpm test tests/generate/index.test.ts  # Single file
+pnpm test:coverage                      # With coverage report
 ```
 
 ## Dependencies
 
 ### Runtime
 
-- **snarkjs**: 0.7.5 (witness calculation)
-- **arkworks**: Compiled as groth16-proofs WASM
+| Package | Version | Purpose |
+| --- | --- | --- |
+| `@orbinum/circuits` | `0.4.4` | Circuit WASM + proving keys |
+| `@orbinum/groth16-proofs` | `2.1.0` | Arkworks WASM proof generation |
+| `snarkjs` | `0.7.6` | Witness calculation + snarkjs proving |
 
 ### Development
 
-- **TypeScript**: 5.7.3
-- **Jest**: 29.7.0 (testing)
-- **Prettier**: 3.4.2 (formatting)
-- **Husky**: 9.1.7 (Git hooks)
-- **lint-staged**: 15.2.11 (pre-commit filtering)
+| Package | Version | Purpose |
+| --- | --- | --- |
+| `vitest` | `4.1.3` | Test runner |
+| `@vitest/coverage-v8` | `4.1.3` | Coverage reports |
+| `typescript` | `6.0.2` | Compiler |
+| `prettier` | `3.8.1` | Code formatting |
+| `circomlibjs` | `0.1.7` | Poseidon hash (disclosure module) |
+| `@types/node` | `25.5.2` | Node.js type definitions |
+| `@types/snarkjs` | `0.7.9` | snarkjs type definitions |
+| `@types/circomlibjs` | `0.1.6` | circomlibjs type definitions |
 
-**See:** `package.json` for complete dependency list.
+**See:** `package.json` for the complete list.
 
 ## Compilation Targets
 
 TypeScript configured for:
 
-- **Target:** ES2020
+- **Target:** ES2022
 - **Module:** CommonJS
-- **Lib:** ES2020, DOM (for browser WASM)
+- **moduleResolution:** node
 - **Strict:** true
+- **types:** ["node"]
+
+`tsconfig.test.json` extends the base config and adds `tests/**` to `include`.
 
 See `tsconfig.json` for full configuration.
 
@@ -462,36 +479,43 @@ Automatically publishes to npm.
 
 ## Common Development Tasks
 
-### Add new circuit support
+### Add a new circuit
 
-1. Add circuit type to `src/types.ts` (CircuitType enum)
-2. Update `getExpectedPublicSignals()` in `src/circuits.ts`
-3. Add unit tests in `tests/unit/`
-4. Add integration test in `tests/integration/{circuit}.test.ts`
-5. Ensure @orbinum/circuits package includes new circuit artifacts
-6. Update documentation in `docs/api.md`
+1. Add the circuit type to `src/circuits/types.ts` (`CircuitType` enum)
+2. Add its config entry in `src/circuits/config.ts` (`getCircuitConfig` switch)
+3. Ensure `@orbinum/circuits` package includes the new artifact files
+4. Add unit tests in `tests/circuits/config.test.ts`
+5. Add integration test in `tests/generate.test.ts`
+6. Update `docs/api.md` (Supported Circuits table)
 
 ### Update dependencies
 
 ```bash
-npm update
-npm run format
-npm test
+pnpm update
+pnpm format
+pnpm test
 ```
 
-### Release new version
+### Release a new version
 
 ```bash
 npm version patch  # or minor, major
 git push --tags
-# GitHub Actions automatically publishes
+# GitHub Actions automatically publishes to npm
 ```
 
-### Debug failing test
+### Run benchmarks
 
 ```bash
-npm test -- --verbose unshield.test.ts
-NODE_DEBUG=* npm test -- unshield.test.ts
+npx tsx scripts/benchmark.ts
+```
+
+Runs all 4 circuits × 2 backends and prints timing per phase.
+
+### Debug a failing test
+
+```bash
+pnpm test -- --reporter=verbose tests/generate/index.test.ts
 ```
 
 ## Resources
@@ -499,7 +523,9 @@ NODE_DEBUG=* npm test -- unshield.test.ts
 - **Circom Documentation**: [docs.circom.io](https://docs.circom.io)
 - **snarkjs**: [github.com/iden3/snarkjs](https://github.com/iden3/snarkjs)
 - **arkworks**: [github.com/arkworks-rs/ark-groth16](https://github.com/arkworks-rs/ark-groth16)
-- **Orbinum Node**: [github.com/orbinum/node](https://github.com/orbinum/node)
+- **Backend comparison**: [docs/backends.md](backends.md)
+- **Usage guide**: [docs/usage.md](usage.md)
+- **API reference**: [docs/api.md](api.md)
 
 ---
 
