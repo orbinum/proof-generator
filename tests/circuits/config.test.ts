@@ -9,7 +9,8 @@ describe('getCircuitConfig', () => {
     expect(config.wasmPath).toBe('unshield.wasm');
     expect(config.zkeyPath).toBe('unshield_pk.zkey');
     expect(config.provingKeyPath).toBe('unshield_pk.ark');
-    expect(config.expectedPublicSignals).toBe(5);
+    // [merkle_root, nullifier, amount, recipient, asset_id, fee]
+    expect(config.expectedPublicSignals).toBe(6);
   });
 
   it('returns correct config for Transfer', () => {
@@ -18,7 +19,8 @@ describe('getCircuitConfig', () => {
     expect(config.wasmPath).toBe('transfer.wasm');
     expect(config.zkeyPath).toBe('transfer_pk.zkey');
     expect(config.provingKeyPath).toBe('transfer_pk.ark');
-    expect(config.expectedPublicSignals).toBe(5);
+    // [merkle_root, nullifiers[2], commitments[2], asset_id, fee]
+    expect(config.expectedPublicSignals).toBe(7);
   });
 
   it('returns correct config for Disclosure', () => {

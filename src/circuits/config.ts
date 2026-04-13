@@ -18,9 +18,11 @@ export function getCircuitConfig(circuitType: CircuitType): CircuitConfig {
 function getExpectedPublicSignals(circuitType: CircuitType): number {
   switch (circuitType) {
     case CircuitType.Unshield:
-      return 5;
+      // [merkle_root, nullifier, amount, recipient, asset_id, fee]
+      return 6;
     case CircuitType.Transfer:
-      return 5;
+      // [merkle_root, nullifiers[2], commitments[2], asset_id, fee]
+      return 7;
     case CircuitType.Disclosure:
       return 4;
     case CircuitType.PrivateLink:
