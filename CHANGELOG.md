@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.4] - 2026-05-08
+
+### Fixed
+
+- **`src/wasm/loader.ts`** — browser WASM init: resolución defensiva de `initFn` para manejar el interop CJS→ESM de Vite. Cuando TypeScript compila `import()` dinámico con `module: "CommonJS"`, Vite envuelve el namespace y reasigna `wasm.default` al objeto namespace, haciendo que `wasm.default.default` sea la función real de init. El loader ahora prueba ambas rutas (`defaultExport` como función directa, o `defaultExport.default`) para garantizar que la inicialización funcione tanto en ESM nativo como en entornos Vite CJS→ESM.
+
 ## [3.5.3] - 2026-05-05
 
 ### Changed
