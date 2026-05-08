@@ -60,7 +60,7 @@ export async function initWasm(): Promise<void> {
       // actual __wbg_init function defensively (direct ESM or CJS-interop path).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const defaultExport = (wasm as any).default;
-      const initFn: ((url: string) => Promise<unknown>) | undefined =
+      const initFn: ((input: { module_or_path: string }) => Promise<unknown>) | undefined =
         typeof defaultExport === 'function'
           ? defaultExport
           : typeof defaultExport?.default === 'function'
@@ -68,7 +68,7 @@ export async function initWasm(): Promise<void> {
             : undefined;
 
       if (initFn) {
-        await initFn(GROTH16_WASM_CDN);
+        await initFn({ module_or_path: GROTH16_WASM_CDN });
       }
     }
 

@@ -62,8 +62,8 @@ See [backends.md](./backends.md) for a full comparison of speed and artifact siz
 
 | Circuit | `CircuitType` | Public signals | Use case |
 |---------|--------------|----------------|----------|
-| Unshield | `CircuitType.Unshield` | 5 | Withdraw from pool to public address |
-| Transfer | `CircuitType.Transfer` | 5 | Private-to-private transfer |
+| Unshield | `CircuitType.Unshield` | 7 | Withdraw from pool to public address |
+| Transfer | `CircuitType.Transfer` | 7 | Private-to-private transfer |
 | Disclosure | `CircuitType.Disclosure` | 4 | Selective field revelation to auditor |
 | PrivateLink | `CircuitType.PrivateLink` | 2 | Privacy-preserving cross-chain identity |
 
