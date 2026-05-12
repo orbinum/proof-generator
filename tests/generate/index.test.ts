@@ -25,6 +25,10 @@ vi.mock('@orbinum/groth16-proofs', () => ({
         '0x' + '02'.repeat(32),
         '0x' + '03'.repeat(32),
         '0x' + '04'.repeat(32),
+        '0x' + '05'.repeat(32),
+        '0x' + '06'.repeat(32),
+        '0x' + '07'.repeat(32),
+        '0x' + '08'.repeat(32),
       ],
     })
   ),
@@ -45,12 +49,12 @@ vi.mock('snarkjs', () => ({
         ],
         pi_c: ['7', '8', '1'],
       },
-      publicSignals: ['10', '20', '30', '40'],
+      publicSignals: ['10', '20', '30', '40', '50', '60', '70', '80'],
     }),
   },
   wtns: {
     calculate: vi.fn().mockResolvedValue(undefined),
-    exportJson: vi.fn().mockResolvedValue([1n, 10n, 20n, 30n, 40n]),
+    exportJson: vi.fn().mockResolvedValue([1n, 10n, 20n, 30n, 40n, 50n, 60n, 70n, 80n]),
   },
 }));
 
@@ -90,7 +94,7 @@ describe('generateProof — snarkjs backend (default)', () => {
   it('returns ProofResult with proof and publicSignals', async () => {
     const result = await generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider });
     expect(result.proof).toMatch(/^0x[0-9a-f]+$/i);
-    expect(result.publicSignals).toHaveLength(4);
+    expect(result.publicSignals).toHaveLength(8);
     expect(result.circuitType).toBe(CircuitType.Disclosure);
   });
 
@@ -153,7 +157,7 @@ describe('generateProof — arkworks backend', () => {
       backend: 'arkworks',
     });
     expect(result.proof).toMatch(/^0x[0-9a-f]+$/i);
-    expect(result.publicSignals).toHaveLength(4);
+    expect(result.publicSignals).toHaveLength(8);
     expect(result.circuitType).toBe(CircuitType.Disclosure);
   });
 
@@ -178,7 +182,7 @@ describe('generateProof — arkworks backend', () => {
     const [numSigs, witnessJson, pkBytes] = (
       wasm.generate_proof_from_decimal_wasm as ReturnType<typeof vi.fn>
     ).mock.calls[0];
-    expect(numSigs).toBe(4);
+    expect(numSigs).toBe(8);
     const parsed = JSON.parse(witnessJson);
     expect(Array.isArray(parsed)).toBe(true);
     expect(parsed[0]).toBe('1');

@@ -3,20 +3,22 @@
  *
  * Generates Groth16 proofs for the `disclosure.circom` circuit.
  *
- * ## Circuit Public Inputs (in order)
- *   0. commitment          – Note commitment (always revealed)
- *   1. revealed_value      – Note value, or 0 if not disclosed
- *   2. revealed_asset_id   – Asset ID, or 0 if not disclosed
- *   3. revealed_owner_hash – Poseidon(owner_pubkey), or 0 if not disclosed
+ * ## Circuit Public Inputs (in order, from snarkjs publicSignals)
+ *   0. epk_x           – Ephemeral public key x (Baby Jubjub)
+ *   1. epk_y           – Ephemeral public key y (Baby Jubjub)
+ *   2. enc_value       – Encrypted note value (0 if not disclosed)
+ *   3. enc_asset_id    – Encrypted asset ID (0 if not disclosed)
+ *   4. enc_owner_hash  – Encrypted Poseidon(owner_pubkey) (0 if not disclosed)
+ *   5. commitment      – Note commitment (always present)
+ *   6. auditor_pk_x    – Auditor Baby Jubjub public key x
+ *   7. auditor_pk_y    – Auditor Baby Jubjub public key y
  *
  * @module @orbinum/proof-generator/disclosure
  */
 
-// @ts-ignore - circomlibjs has no type declarations
-import { buildPoseidon } from 'circomlibjs';
 import { generateProof } from '../generate';
 import { CircuitType, ProofResult } from '../circuits/types';
-import { bigIntToHex, hexSignalToBigInt, u64ToFieldStr } from '../utils';
+import { u64ToFieldStr } from '../utils';
 import { ArtifactProvider } from '../providers/interface';
 import { DisclosureMask, DisclosureProofOutput } from './types';
 
@@ -32,26 +34,22 @@ export type { DisclosureMask, DisclosureProofOutput } from './types';
  * All values are decimal BigInt strings — the native format that snarkjs
  * expects for scalar field elements.
  */
-async function buildCircuitInputs(
+function buildCircuitInputs(
   value: bigint,
   ownerPubkey: bigint,
   blinding: bigint,
   assetId: bigint,
   commitment: bigint,
+  auditorPkX: bigint,
+  auditorPkY: bigint,
+  r: bigint,
   mask: DisclosureMask
-): Promise<Record<string, string>> {
-  const poseidon = await buildPoseidon();
-  const F = poseidon.F;
-
-  // viewing_key = Poseidon(owner_pubkey) — matches the circom constraint
-  const viewingKey: bigint = F.toObject(poseidon([ownerPubkey]));
-
+): Record<string, string> {
   return {
     // Public inputs
     commitment: commitment.toString(),
-    revealed_value: (mask.discloseValue ? value : 0n).toString(),
-    revealed_asset_id: (mask.discloseAssetId ? assetId : 0n).toString(),
-    revealed_owner_hash: (mask.discloseOwner ? viewingKey : 0n).toString(),
+    auditor_pk_x: auditorPkX.toString(),
+    auditor_pk_y: auditorPkY.toString(),
     // Private inputs
     value: u64ToFieldStr(value),
     asset_id: u64ToFieldStr(assetId),
@@ -60,6 +58,7 @@ async function buildCircuitInputs(
     disclose_value: mask.discloseValue ? '1' : '0',
     disclose_asset_id: mask.discloseAssetId ? '1' : '0',
     disclose_owner: mask.discloseOwner ? '1' : '0',
+    r: r.toString(),
   };
 }
 
@@ -70,11 +69,19 @@ async function buildCircuitInputs(
 /**
  * Generate a selective disclosure Groth16 proof.
  *
+ * The circuit encrypts the selected fields on-circuit using ECDH over Baby
+ * Jubjub. The auditor decrypts offline with their spending key:
+ *   shared = sk_A · epk
+ *   plaintext_i = enc_i - Poseidon(shared.x, shared.y, i)  (mod BN254_P)
+ *
  * @param value       – Note value as BigInt (u64 field element)
  * @param ownerPubkey – Owner public key as BigInt (BN254 scalar)
  * @param blinding    – Blinding factor as BigInt
  * @param assetId     – Asset ID as BigInt (u32)
  * @param commitment  – Note commitment as BigInt
+ * @param auditorPkX  – Auditor Baby Jubjub public key x-coordinate
+ * @param auditorPkY  – Auditor Baby Jubjub public key y-coordinate
+ * @param r           – Ephemeral scalar (must be random, < Baby Jubjub order)
  * @param mask        – Which fields to disclose to the auditor
  * @param options     – Optional artifact provider override
  */
@@ -84,6 +91,9 @@ export async function generateDisclosureProof(
   blinding: bigint,
   assetId: bigint,
   commitment: bigint,
+  auditorPkX: bigint,
+  auditorPkY: bigint,
+  r: bigint,
   mask: DisclosureMask,
   options: { provider?: ArtifactProvider; verbose?: boolean } = {}
 ): Promise<DisclosureProofOutput> {
@@ -93,21 +103,39 @@ export async function generateDisclosureProof(
     );
   }
 
-  const inputs = await buildCircuitInputs(value, ownerPubkey, blinding, assetId, commitment, mask);
+  const inputs = buildCircuitInputs(
+    value,
+    ownerPubkey,
+    blinding,
+    assetId,
+    commitment,
+    auditorPkX,
+    auditorPkY,
+    r,
+    mask
+  );
 
-  // Public signal order from disclosure.circom:
-  //   [0] commitment  [1] revealed_value  [2] revealed_asset_id  [3] revealed_owner_hash
+  // Public signal order from disclosure.circom (outputs first, then public inputs):
+  //   [0] epk_x  [1] epk_y  [2] enc_value  [3] enc_asset_id  [4] enc_owner_hash
+  //   [5] commitment  [6] auditor_pk_x  [7] auditor_pk_y
   const result: ProofResult = await generateProof(CircuitType.Disclosure, inputs, {
     provider: options.provider,
     verbose: options.verbose,
   });
 
-  const [sigCommitment, sigValue, sigAssetId, sigOwnerHash] = result.publicSignals;
+  const [sigEpkX, sigEpkY, sigEncValue, sigEncAssetId, sigEncOwnerHash, sigCommitment] =
+    result.publicSignals;
 
-  const revealedData: DisclosureProofOutput['revealedData'] = { commitment: sigCommitment };
-  if (mask.discloseValue) revealedData.value = hexSignalToBigInt(sigValue).toString(10);
-  if (mask.discloseAssetId) revealedData.assetId = Number(hexSignalToBigInt(sigAssetId));
-  if (mask.discloseOwner) revealedData.ownerHash = bigIntToHex(hexSignalToBigInt(sigOwnerHash));
-
-  return { proof: result.proof, publicSignals: result.publicSignals, revealedData };
+  return {
+    proof: result.proof,
+    publicSignals: result.publicSignals,
+    encryptedData: {
+      epkX: sigEpkX,
+      epkY: sigEpkY,
+      encValue: sigEncValue,
+      encAssetId: sigEncAssetId,
+      encOwnerHash: sigEncOwnerHash,
+      commitment: sigCommitment,
+    },
+  };
 }
