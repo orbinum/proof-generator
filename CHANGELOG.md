@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-05-12
+
+### Changed
+
+- **`@orbinum/circuits`** bumped `0.7.0` → `0.8.0` — the `disclosure.circom` circuit now performs **ECDH encryption on-circuit** over Baby Jubjub instead of revealing note fields as plaintext public signals.
+- **`src/disclosure/index.ts`** — `generateDisclosureProof()` updated to match the new circuit interface:
+  - Three new required parameters: `auditorPkX: bigint`, `auditorPkY: bigint`, `r: bigint` (ephemeral scalar — must be random, `< Baby Jubjub suborder`).
+  - `buildCircuitInputs` is now synchronous — the off-circuit `buildPoseidon()` call (circomlibjs) is removed because the owner hash is now computed inside the circuit.
+  - Circuit inputs updated: `revealed_value`, `revealed_asset_id`, `revealed_owner_hash` replaced by `auditor_pk_x`, `auditor_pk_y`, `r`.
+  - Output `revealedData` replaced by `encryptedData` (see types).
+- **`src/disclosure/types.ts`** — `DisclosureProofOutput.revealedData` replaced by `encryptedData`:
+  ```
+  encryptedData: {
+    epkX: string;        // ephemeral public key x (Baby Jubjub)
+    epkY: string;        // ephemeral public key y (Baby Jubjub)
+    encValue: string;    // encrypted note value (0 if not disclosed)
+    encAssetId: string;  // encrypted asset ID (0 if not disclosed)
+    encOwnerHash: string;// encrypted Poseidon(owner_pubkey) (0 if not disclosed)
+    commitment: string;  // note commitment (always present, not encrypted)
+  }
+  ```
+  Public signal order updated: `[epk_x, epk_y, enc_value, enc_asset_id, enc_owner_hash, commitment, auditor_pk_x, auditor_pk_y]`.
+- **`src/circuits/config.ts`** — `expectedPublicSignals` for `Disclosure` updated: 4 → 8.
+- **`tests/circuits/config.test.ts`** — expectation updated to match new signal count.
+- **`tests/disclosure/index.test.ts`** — tests rewritten for new ECDH-based signature, auditor key inputs, and `encryptedData` output shape.
+- **`tests/generate/index.test.ts`** — disclosure test cases updated.
+
+### Removed
+
+- **`circomlibjs`** removed as a runtime import from `src/disclosure/index.ts` — off-circuit `Poseidon(owner_pubkey)` hashing is no longer required, as the circuit handles all encryption internally.
+
+### Breaking Changes
+
+- `generateDisclosureProof(value, ownerPubkey, blinding, assetId, commitment, mask, options?)` → `generateDisclosureProof(value, ownerPubkey, blinding, assetId, commitment, auditorPkX, auditorPkY, r, mask, options?)`.
+- `DisclosureProofOutput.revealedData` is removed. Use `encryptedData` instead. The auditor decrypts offline:
+  ```
+  shared      = sk_A · epk            (Baby Jubjub scalar multiplication)
+  plaintext_i = enc_i - Poseidon(shared.x, shared.y, i)  mod BN254_P
+  ```
+- Public signal count for `Disclosure` circuit: 4 → 8.
+
 ## [3.5.4] - 2026-05-08
 
 ### Fixed

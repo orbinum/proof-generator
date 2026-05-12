@@ -29,7 +29,8 @@ describe('getCircuitConfig', () => {
     expect(config.wasmPath).toBe('disclosure.wasm');
     expect(config.zkeyPath).toBe('disclosure_pk.zkey');
     expect(config.provingKeyPath).toBe('disclosure_pk.ark');
-    expect(config.expectedPublicSignals).toBe(4);
+    // [epk_x, epk_y, enc_value, enc_asset_id, enc_owner_hash, commitment, auditor_pk_x, auditor_pk_y]
+    expect(config.expectedPublicSignals).toBe(8);
   });
 
   it('returns correct config for PrivateLink', () => {

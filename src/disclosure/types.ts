@@ -19,18 +19,27 @@ export interface DisclosureProofOutput {
   proof: string;
   /**
    * Raw public signals in hex (0x-prefixed, 32 bytes each).
-   * Order: [commitment, revealed_value, revealed_asset_id, revealed_owner_hash]
+   * Order: [epk_x, epk_y, enc_value, enc_asset_id, enc_owner_hash, commitment, auditor_pk_x, auditor_pk_y]
    */
   publicSignals: string[];
-  /** Human-readable revealed data */
-  revealedData: {
-    /** Revealed note value as decimal string, or undefined if not disclosed */
-    value?: string;
-    /** Revealed asset ID as number, or undefined if not disclosed */
-    assetId?: number;
-    /** Revealed owner hash as 0x-prefixed hex, or undefined if not disclosed */
-    ownerHash?: string;
-    /** Note commitment (always present) */
+  /**
+   * ECDH-encrypted disclosure data.
+   * The auditor decrypts offline using their Baby Jubjub spending key:
+   *   shared = sk_A · epk
+   *   plaintext_i = enc_i - Poseidon(shared.x, shared.y, i)  (mod BN254_P)
+   */
+  encryptedData: {
+    /** Ephemeral public key x-coordinate (Baby Jubjub) */
+    epkX: string;
+    /** Ephemeral public key y-coordinate (Baby Jubjub) */
+    epkY: string;
+    /** Encrypted note value (0 if not disclosed) */
+    encValue: string;
+    /** Encrypted asset ID (0 if not disclosed) */
+    encAssetId: string;
+    /** Encrypted owner hash Poseidon(owner_pubkey) (0 if not disclosed) */
+    encOwnerHash: string;
+    /** Note commitment (always present, not encrypted) */
     commitment: string;
   };
 }
