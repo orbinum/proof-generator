@@ -7,13 +7,11 @@
 
 // ── Core API ─────────────────────────────────────────────────────────────────
 export { generateProof, type GenerateOptions } from './generate';
-export { generateDisclosureProof } from './disclosure';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export * from './circuits/types';
 export * from './wasm/types';
 export * from './errors';
-export type { DisclosureMask, DisclosureProofOutput } from './disclosure';
 
 // ── Circuits ──────────────────────────────────────────────────────────────────
 export { getCircuitConfig } from './circuits';

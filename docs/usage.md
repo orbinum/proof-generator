@@ -64,48 +64,38 @@ See [backends.md](./backends.md) for a full comparison of speed and artifact siz
 |---------|--------------|----------------|----------|
 | Unshield | `CircuitType.Unshield` | 7 | Withdraw from pool to public address |
 | Transfer | `CircuitType.Transfer` | 7 | Private-to-private transfer |
-| Disclosure | `CircuitType.Disclosure` | 4 | Selective field revelation to auditor |
+| ValueProof | `CircuitType.ValueProof` | 4 | Prove note value and ownership without revealing the spending key |
 | PrivateLink | `CircuitType.PrivateLink` | 2 | Privacy-preserving cross-chain identity |
 
 ---
 
-## Selective Disclosure
+## Value Proof
 
-The `Disclosure` circuit has a dedicated helper that handles Poseidon key derivation and decodes the public signals into human-readable output:
+The `ValueProof` circuit has a dedicated helper that computes `owner_hash = Poseidon(ownerPubkey)` and decodes the public signals into named fields:
 
 ```typescript
-import { generateDisclosureProof } from '@orbinum/proof-generator';
-import type { DisclosureMask } from '@orbinum/proof-generator';
+import { generateValueProof } from '@orbinum/proof-generator';
 
-const mask: DisclosureMask = {
-  discloseValue: true,    // reveal the note value
-  discloseAssetId: true,  // reveal the asset ID
-  discloseOwner: false,   // keep owner private
-};
-
-const result = await generateDisclosureProof(
+const result = await generateValueProof(
   1000n,       // value (bigint, u64)
   pubkey,      // ownerPubkey (bigint, BN254 scalar)
   blinding,    // blinding factor (bigint)
   1n,          // assetId (bigint, u32)
   commitment,  // note commitment (bigint)
-  mask,
 );
 
 console.log(result.proof);         // "0x..." (128 bytes)
 console.log(result.publicSignals); // 4 hex signals
-console.log(result.revealedData);
+console.log(result.decoded);
 // {
 //   commitment: "0x...",
-//   value: "1000",       // decimal string (present because discloseValue: true)
-//   assetId: 1,          // number (present because discloseAssetId: true)
-//   ownerHash: undefined // absent because discloseOwner: false
+//   value: "1000",    // decimal string
+//   assetId: 1,       // number
+//   ownerHash: "0x..." // Poseidon(ownerPubkey)
 // }
 ```
 
-At least one mask field must be `true` — passing all `false` throws an error.
-
-You can also use `generateProof(CircuitType.Disclosure, inputs)` directly if you build the circuit inputs object manually.
+You can also use `generateProof(CircuitType.ValueProof, inputs)` directly if you build the circuit inputs object manually.
 
 ---
 

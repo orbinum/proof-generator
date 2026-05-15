@@ -2,7 +2,7 @@
 export enum CircuitType {
   Unshield = 'unshield',
   Transfer = 'transfer',
-  Disclosure = 'disclosure',
+  ValueProof = 'value_proof',
   PrivateLink = 'private_link',
 }
 

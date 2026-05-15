@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-05-14
+
+### Added
+
+- **`CircuitType.ValueProof`** (`'value_proof'`) added to `src/circuits/types.ts` — replaces the removed `Disclosure` circuit. The `ValueProof` circuit proves that a note commitment encodes exactly the declared `value` and `asset_id` without revealing the spending key or requiring a Merkle proof.
+- **`src/circuits/config.ts`** — `expectedPublicSignals` case for `ValueProof`: `4` (`[commitment, value, asset_id, owner_hash]`).
+- **`bench/value-proof.ts`** — Standalone benchmark script for the `value_proof` circuit. Measures snarkjs and arkworks backends over 5 post-warmup runs and prints formatted tables ready to paste into docs.
+- **`bench/transfer.ts`** — Standalone benchmark script for the `transfer` circuit (same structure).
+- **`bench/tsconfig.json`** — TypeScript config scoped to the `bench/` directory.
+
+### Changed
+
+- **Performance docs updated with real measured numbers** (Apple M-series, Node.js 22, 5 runs post-warmup):
+  - `ValueProof` snarkjs: **91ms**; arkworks witness 24ms + serialize 3ms + prove 234ms = **262ms total**.
+  - `Transfer` snarkjs: **1148ms** (arkworks not yet measured — `.ark` key pending).
+
 ## [3.6.0] - 2026-05-12
 
 ### Changed

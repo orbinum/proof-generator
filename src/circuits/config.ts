@@ -23,9 +23,9 @@ function getExpectedPublicSignals(circuitType: CircuitType): number {
     case CircuitType.Transfer:
       // [merkle_root, nullifiers[2], commitments[2], asset_id, fee]
       return 7;
-    case CircuitType.Disclosure:
-      // outputs: [epk_x, epk_y, enc_value, enc_asset_id, enc_owner_hash] + inputs: [commitment, auditor_pk_x, auditor_pk_y]
-      return 8;
+    case CircuitType.ValueProof:
+      // [commitment, value, asset_id, owner_hash]
+      return 4;
     case CircuitType.PrivateLink:
       return 2;
     default:
