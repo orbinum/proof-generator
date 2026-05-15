@@ -23,16 +23,6 @@ describe('getCircuitConfig', () => {
     expect(config.expectedPublicSignals).toBe(7);
   });
 
-  it('returns correct config for Disclosure', () => {
-    const config = getCircuitConfig(CircuitType.Disclosure);
-    expect(config.name).toBe('disclosure');
-    expect(config.wasmPath).toBe('disclosure.wasm');
-    expect(config.zkeyPath).toBe('disclosure_pk.zkey');
-    expect(config.provingKeyPath).toBe('disclosure_pk.ark');
-    // [epk_x, epk_y, enc_value, enc_asset_id, enc_owner_hash, commitment, auditor_pk_x, auditor_pk_y]
-    expect(config.expectedPublicSignals).toBe(8);
-  });
-
   it('returns correct config for PrivateLink', () => {
     const config = getCircuitConfig(CircuitType.PrivateLink);
     expect(config.name).toBe('private_link');
@@ -43,12 +33,7 @@ describe('getCircuitConfig', () => {
   });
 
   it('all configs have name, wasmPath, zkeyPath, provingKeyPath, expectedPublicSignals', () => {
-    const types = [
-      CircuitType.Unshield,
-      CircuitType.Transfer,
-      CircuitType.Disclosure,
-      CircuitType.PrivateLink,
-    ];
+    const types = [CircuitType.Unshield, CircuitType.Transfer, CircuitType.PrivateLink];
     for (const type of types) {
       const config = getCircuitConfig(type);
       expect(config.name).toBeTruthy();
