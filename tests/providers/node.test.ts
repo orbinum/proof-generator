@@ -27,9 +27,6 @@ beforeAll(() => {
     'transfer.wasm',
     'transfer_pk.zkey',
     'transfer_pk.ark',
-    'disclosure.wasm',
-    'disclosure_pk.zkey',
-    'disclosure_pk.ark',
     'private_link.wasm',
     'private_link_pk.zkey',
     'private_link_pk.ark',
@@ -67,12 +64,6 @@ describe('NodeArtifactProvider', () => {
   it('reads WASM file for Transfer circuit', async () => {
     const provider = new NodeArtifactProvider(tmpDir);
     const result = await provider.getCircuitWasm(CircuitType.Transfer);
-    expect(result).toBeInstanceOf(Uint8Array);
-  });
-
-  it('reads WASM file for Disclosure circuit', async () => {
-    const provider = new NodeArtifactProvider(tmpDir);
-    const result = await provider.getCircuitWasm(CircuitType.Disclosure);
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
@@ -119,7 +110,7 @@ describe('NodeArtifactProvider', () => {
     const types = [
       CircuitType.Unshield,
       CircuitType.Transfer,
-      CircuitType.Disclosure,
+      CircuitType.ValueProof,
       CircuitType.PrivateLink,
     ];
     for (const type of types) {
