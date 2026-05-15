@@ -107,45 +107,35 @@ console.log(result.publicSignals);
 
 ---
 
-### `generateDisclosureProof(value, ownerPubkey, blinding, assetId, commitment, mask, options?)`
+### `generateValueProof(value, ownerPubkey, blinding, assetId, commitment, options?)`
 
-High-level helper for the `Disclosure` circuit. Handles Poseidon key derivation
-(`viewing_key = Poseidon(ownerPubkey)`) and returns human-readable revealed data.
+High-level helper for the `ValueProof` circuit. Computes `owner_hash = Poseidon(ownerPubkey)`
+and returns the decoded public signals alongside the proof.
 
 **Parameters:**
 
 ```typescript
-await generateDisclosureProof(
+await generateValueProof(
   value: bigint,           // Note value (u64)
   ownerPubkey: bigint,     // Owner public key (BN254 scalar)
   blinding: bigint,        // Blinding factor
   assetId: bigint,         // Asset ID (u32)
   commitment: bigint,      // Note commitment
-  mask: DisclosureMask,    // Which fields to disclose
   options?: GenerateOptions
 )
 ```
 
-**`DisclosureMask`:**
+**Returns:** `Promise<ValueProofOutput>`
 
 ```typescript
-interface DisclosureMask {
-  discloseValue:   boolean; // Reveal note value
-  discloseAssetId: boolean; // Reveal asset ID
-  discloseOwner:   boolean; // Reveal Poseidon(ownerPubkey)
-}
-```
-
-**Returns:** `Promise<DisclosureProofOutput>`
-
-```typescript
-interface DisclosureProofOutput {
-  proof: string;            // 128-byte compressed proof (0x-prefixed)
-  publicSignals: string[];  // [commitment, revealed_value, revealed_asset_id, revealed_owner_hash]
-  revealedData: {
-    value?: string;         // Decimal string, or undefined if not disclosed
-    assetId?: number;       // Number, or undefined if not disclosed
-    ownerHash?: string;     // 0x-prefixed hex, or undefined if not disclosed
+interface ValueProofOutput {
+  proof: string;           // 128-byte compressed proof (0x-prefixed)
+  publicSignals: string[]; // [commitment, value, asset_id, owner_hash]
+  decoded: {
+    commitment: string;    // 0x-prefixed hex (32 bytes)
+    value: string;         // Decimal string (u64)
+    assetId: number;       // u32
+    ownerHash: string;     // 0x-prefixed hex (32 bytes) — Poseidon(ownerPubkey)
   };
 }
 ```
@@ -153,20 +143,19 @@ interface DisclosureProofOutput {
 **Example:**
 
 ```typescript
-import { generateDisclosureProof } from '@orbinum/proof-generator';
+import { generateValueProof } from '@orbinum/proof-generator';
 
-const result = await generateDisclosureProof(
+const result = await generateValueProof(
   1000n,        // value
   ownerPubkey,  // bigint
   blinding,     // bigint
   42n,          // assetId
   commitment,   // bigint
-  { discloseValue: true, discloseAssetId: true, discloseOwner: false }
 );
 
-console.log(result.revealedData.value);    // '1000'
-console.log(result.revealedData.assetId);  // 42
-console.log(result.revealedData.ownerHash); // undefined (not disclosed)
+console.log(result.decoded.value);     // '1000'
+console.log(result.decoded.assetId);   // 42
+console.log(result.decoded.ownerHash); // '0x...' (always present)
 ```
 
 ## Enumerations
@@ -179,7 +168,7 @@ Supported circuits:
 enum CircuitType {
   Unshield = 'unshield', // Withdrawal to public address
   Transfer = 'transfer', // Private transfer
-  Disclosure = 'disclosure', // Selective revelation
+  ValueProof = 'value_proof', // Prove note value (commitment binding)
   PrivateLink = 'private_link', // Privacy-preserving cross-chain identity dispatch
 }
 ```
@@ -191,7 +180,7 @@ import { CircuitType } from '@orbinum/proof-generator';
 
 await generateProof(CircuitType.Unshield, inputs);
 await generateProof(CircuitType.Transfer, inputs);
-await generateProof(CircuitType.Disclosure, inputs);
+await generateProof(CircuitType.ValueProof, inputs);
 await generateProof(CircuitType.PrivateLink, inputs);
 ```
 
@@ -289,7 +278,7 @@ try {
 | --------------- | -------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------ |
 | **Unshield**    | 5              | `merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, note fields, `path_*` | Withdraw from pool to public address             |
 | **Transfer**    | 5              | `merkle_root`, input/output nullifiers and commitments, note fields, `path_*`        | Private-to-private transfer                      |
-| **Disclosure**  | 4              | `commitment`, `viewing_key`, revealed fields, disclosure masks, note fields          | Selective revelation                             |
+| **ValueProof**  | 4              | `commitment`, `value`, `asset_id`, `owner_hash`, note fields                        | Prove note value without revealing extra state   |
 | **PrivateLink** | 2              | `commitment`, `call_hash_fe`                                                         | Privacy-preserving cross-chain identity dispatch |
 
 ### Output Format
@@ -317,8 +306,9 @@ See [docs/backends.md](backends.md) for a full benchmark analysis.
 | --- | --- | --- |
 | Unshield | ~1.3 s | ~7 s |
 | Transfer | ~4.7 s | ~20 s |
-| Disclosure | ~1.1 s | ~5 s |
+| ValueProof | ~1.1 s | ~5 s |
 | PrivateLink | ~0.7 s | ~3 s |
+```
 
 - **snarkjs** — default, fastest, uses `.zkey` proving keys
 - **arkworks** — 2–3× smaller proof artifacts, uses `.ark` proving keys
@@ -423,7 +413,7 @@ Proof generation is compute-intensive. Expected times:
 
 - **Unshield**: ~1.5s
 - **Transfer**: ~3s
-- **Disclosure**: ~0.8s
+- **ValueProof**: ~0.8s
 - **PrivateLink**: ~0.7s
 
 For faster proofs, ensure:
