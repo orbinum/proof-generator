@@ -28,7 +28,6 @@ vi.mock('@orbinum/groth16-proofs', () => ({
         '0x' + '05'.repeat(32),
         '0x' + '06'.repeat(32),
         '0x' + '07'.repeat(32),
-        '0x' + '08'.repeat(32),
       ],
     })
   ),
@@ -49,12 +48,12 @@ vi.mock('snarkjs', () => ({
         ],
         pi_c: ['7', '8', '1'],
       },
-      publicSignals: ['10', '20', '30', '40', '50', '60', '70', '80'],
+      publicSignals: ['10', '20', '30', '40', '50', '60', '70'],
     }),
   },
   wtns: {
     calculate: vi.fn().mockResolvedValue(undefined),
-    exportJson: vi.fn().mockResolvedValue([1n, 10n, 20n, 30n, 40n, 50n, 60n, 70n, 80n]),
+    exportJson: vi.fn().mockResolvedValue([1n, 10n, 20n, 30n, 40n, 50n, 60n, 70n]),
   },
 }));
 
@@ -92,28 +91,28 @@ describe('generateProof — snarkjs backend (default)', () => {
   });
 
   it('returns ProofResult with proof and publicSignals', async () => {
-    const result = await generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider });
+    const result = await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider });
     expect(result.proof).toMatch(/^0x[0-9a-f]+$/i);
-    expect(result.publicSignals).toHaveLength(8);
-    expect(result.circuitType).toBe(CircuitType.Disclosure);
+    expect(result.publicSignals).toHaveLength(7);
+    expect(result.circuitType).toBe(CircuitType.Unshield);
   });
 
   it('uses snarkjs backend by default (no backend option)', async () => {
     const snarkjs = await import('snarkjs');
-    await generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider });
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider });
     expect(snarkjs.groth16.fullProve).toHaveBeenCalledTimes(1);
   });
 
   it('explicit backend: snarkjs also uses snarkjs', async () => {
     const snarkjs = await import('snarkjs');
-    await generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider, backend: 'snarkjs' });
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider, backend: 'snarkjs' });
     expect(snarkjs.groth16.fullProve).toHaveBeenCalledTimes(1);
   });
 
   it('fetches WASM and zkey from provider', async () => {
-    await generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider });
-    expect(provider.getCircuitWasm).toHaveBeenCalledWith(CircuitType.Disclosure);
-    expect(provider.getCircuitZkey).toHaveBeenCalledWith(CircuitType.Disclosure);
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider });
+    expect(provider.getCircuitWasm).toHaveBeenCalledWith(CircuitType.Unshield);
+    expect(provider.getCircuitZkey).toHaveBeenCalledWith(CircuitType.Unshield);
   });
 
   it('throws CircuitNotFoundError when provider rejects', async () => {
@@ -122,13 +121,13 @@ describe('generateProof — snarkjs backend (default)', () => {
       getCircuitZkey: vi.fn().mockRejectedValue(new Error('not found')),
     };
     await expect(
-      generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider: badProvider })
+      generateProof(CircuitType.Unshield, VALID_INPUTS, { provider: badProvider })
     ).rejects.toBeInstanceOf(CircuitNotFoundError);
   });
 
   it('throws InvalidInputsError for null input value', async () => {
     await expect(
-      generateProof(CircuitType.Disclosure, { commitment: null as any }, { provider })
+      generateProof(CircuitType.Unshield, { commitment: null as any }, { provider })
     ).rejects.toBeInstanceOf(InvalidInputsError);
   });
 
@@ -136,7 +135,7 @@ describe('generateProof — snarkjs backend (default)', () => {
     const snarkjs = await import('snarkjs');
     vi.mocked(snarkjs.groth16.fullProve).mockRejectedValueOnce(new Error('proving failed'));
     await expect(
-      generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider })
+      generateProof(CircuitType.Unshield, VALID_INPUTS, { provider })
     ).rejects.toBeInstanceOf(ProofGenerationError);
   });
 });
@@ -152,37 +151,37 @@ describe('generateProof — arkworks backend', () => {
   });
 
   it('returns ProofResult with proof and publicSignals', async () => {
-    const result = await generateProof(CircuitType.Disclosure, VALID_INPUTS, {
+    const result = await generateProof(CircuitType.Unshield, VALID_INPUTS, {
       provider,
       backend: 'arkworks',
     });
     expect(result.proof).toMatch(/^0x[0-9a-f]+$/i);
-    expect(result.publicSignals).toHaveLength(8);
-    expect(result.circuitType).toBe(CircuitType.Disclosure);
+    expect(result.publicSignals).toHaveLength(7);
+    expect(result.circuitType).toBe(CircuitType.Unshield);
   });
 
   it('uses snarkjs wtns.calculate (not fullProve) for witness', async () => {
     const snarkjs = await import('snarkjs');
-    await generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider, backend: 'arkworks' });
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider, backend: 'arkworks' });
     expect(snarkjs.wtns.calculate).toHaveBeenCalledTimes(1);
     expect(snarkjs.groth16.fullProve).not.toHaveBeenCalled();
   });
 
   it('fetches WASM and .ark proving key from provider', async () => {
-    await generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider, backend: 'arkworks' });
-    expect(provider.getCircuitWasm).toHaveBeenCalledWith(CircuitType.Disclosure);
-    expect(provider.getCircuitProvingKey).toHaveBeenCalledWith(CircuitType.Disclosure);
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider, backend: 'arkworks' });
+    expect(provider.getCircuitWasm).toHaveBeenCalledWith(CircuitType.Unshield);
+    expect(provider.getCircuitProvingKey).toHaveBeenCalledWith(CircuitType.Unshield);
     expect(provider.getCircuitZkey).not.toHaveBeenCalled();
   });
 
   it('passes witness decimal JSON and .ark bytes to WASM', async () => {
     const wasm = await import('@orbinum/groth16-proofs');
-    await generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider, backend: 'arkworks' });
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider, backend: 'arkworks' });
     expect(wasm.generate_proof_from_decimal_wasm).toHaveBeenCalledTimes(1);
     const [numSigs, witnessJson, pkBytes] = (
       wasm.generate_proof_from_decimal_wasm as ReturnType<typeof vi.fn>
     ).mock.calls[0];
-    expect(numSigs).toBe(8);
+    expect(numSigs).toBe(7);
     const parsed = JSON.parse(witnessJson);
     expect(Array.isArray(parsed)).toBe(true);
     expect(parsed[0]).toBe('1');
@@ -196,7 +195,7 @@ describe('generateProof — arkworks backend', () => {
       getCircuitProvingKey: vi.fn().mockRejectedValue(new Error('ark not found')),
     };
     await expect(
-      generateProof(CircuitType.Disclosure, VALID_INPUTS, {
+      generateProof(CircuitType.Unshield, VALID_INPUTS, {
         provider: badProvider,
         backend: 'arkworks',
       })
@@ -209,7 +208,7 @@ describe('generateProof — arkworks backend', () => {
       getCircuitZkey: vi.fn().mockResolvedValue(FAKE_ZKEY),
     };
     await expect(
-      generateProof(CircuitType.Disclosure, VALID_INPUTS, {
+      generateProof(CircuitType.Unshield, VALID_INPUTS, {
         provider: noArkProvider,
         backend: 'arkworks',
       })
@@ -222,14 +221,14 @@ describe('generateProof — arkworks backend', () => {
       throw new Error('bad proving key');
     });
     await expect(
-      generateProof(CircuitType.Disclosure, VALID_INPUTS, { provider, backend: 'arkworks' })
+      generateProof(CircuitType.Unshield, VALID_INPUTS, { provider, backend: 'arkworks' })
     ).rejects.toBeInstanceOf(ProofGenerationError);
   });
 
   it('throws InvalidInputsError for null input value', async () => {
     await expect(
       generateProof(
-        CircuitType.Disclosure,
+        CircuitType.Unshield,
         { commitment: null as any },
         {
           provider,
