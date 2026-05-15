@@ -40,9 +40,9 @@ proof-generator/
 │   │       ├── snarkjs.ts         runSnarkjsBackend()
 │   │       └── arkworks.ts        runArkworksBackend()
 │   │
-│   ├── disclosure/                Selective disclosure helpers
-│   │   ├── index.ts               generateDisclosureProof()
-│   │   └── types.ts               DisclosureMask, DisclosureProofOutput
+│   ├── value_proof/               Value proof helpers
+│   │   ├── index.ts               generateValueProof()
+│   │   └── types.ts               ValueProofOutput
 │   │
 │   ├── circuits/                  Circuit configuration
 │   │   ├── config.ts              getCircuitConfig()
@@ -73,8 +73,8 @@ proof-generator/
 │   ├── generate/
 │   │   ├── index.test.ts          generateProof() — 15 tests
 │   │   └── provider.test.ts       resolveProvider() — 4 tests
-│   ├── disclosure/
-│   │   └── index.test.ts          generateDisclosureProof() — 9 tests
+│   ├── value_proof/
+│   │   └── index.test.ts          generateValueProof() — 9 tests
 │   ├── errors/
 │   │   └── index.test.ts          Error class hierarchy — 11 tests
 │   ├── circuits/
@@ -230,10 +230,10 @@ provider.getCircuitWasm + getCircuitProvingKey (.ark)
   → generateProofFromWitnessWasm(witness, provingKey)
 ```
 
-### `src/disclosure/index.ts`
+### `src/value_proof/index.ts`
 
-Uses `circomlibjs.buildPoseidon` to compute `viewing_key = Poseidon(ownerPubkey)`, then calls
-`generateProof(CircuitType.Disclosure, ...)` and maps raw signals to `DisclosureProofOutput.revealedData`.
+Uses `circomlibjs.buildPoseidon` to compute `owner_hash = Poseidon(ownerPubkey)`, then calls
+`generateProof(CircuitType.ValueProof, ...)` and maps raw signals to `ValueProofOutput.decoded`.
 
 ### `src/errors/index.ts`
 
@@ -285,7 +285,7 @@ generateProof()
 
 - **snarkjs 0.7.6**: Witness calculation for all circuits; also the full prover in the `snarkjs` backend
 - **@orbinum/groth16-proofs 2.1.0**: Arkworks Groth16 WASM — proof generation in `arkworks` backend, and 128-byte compression for `snarkjs` backend
-- **circomlibjs 0.1.7**: Poseidon hash implementation — used exclusively in `src/disclosure/`
+- **circomlibjs 0.1.7**: Poseidon hash implementation — used exclusively in `src/value_proof/`
 
 ### Provider System
 
@@ -328,9 +328,9 @@ node_modules/
 │   ├── transfer.wasm
 │   ├── transfer_pk.ark
 │   ├── transfer_pk.zkey
-│   ├── disclosure.wasm
-│   ├── disclosure_pk.ark
-│   ├── disclosure_pk.zkey
+│   ├── value_proof.wasm
+│   ├── value_proof_pk.ark
+│   ├── value_proof_pk.zkey
 │   ├── private_link.wasm
 │   ├── private_link_pk.ark
 │   └── private_link_pk.zkey
@@ -361,8 +361,8 @@ tests/
 ├── generate/
 │   ├── index.test.ts     (15 tests)  generateProof — mocked provider & backends
 │   └── provider.test.ts  ( 4 tests)  resolveProvider — environment detection
-├── disclosure/
-│   └── index.test.ts     ( 9 tests)  generateDisclosureProof — mocked Poseidon
+├── value_proof/
+│   └── index.test.ts     ( 9 tests)  generateValueProof — mocked Poseidon
 ├── errors/
 │   └── index.test.ts     (11 tests)  Error hierarchy and .code values
 ├── circuits/
@@ -440,7 +440,7 @@ pnpm test:coverage                      # With coverage report
 | `@vitest/coverage-v8` | `4.1.3` | Coverage reports |
 | `typescript` | `6.0.2` | Compiler |
 | `prettier` | `3.8.1` | Code formatting |
-| `circomlibjs` | `0.1.7` | Poseidon hash (disclosure module) |
+| `circomlibjs` | `0.1.7` | Poseidon hash (value_proof module) |
 | `@types/node` | `25.5.2` | Node.js type definitions |
 | `@types/snarkjs` | `0.7.9` | snarkjs type definitions |
 | `@types/circomlibjs` | `0.1.6` | circomlibjs type definitions |
