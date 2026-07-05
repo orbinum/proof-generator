@@ -18,7 +18,7 @@ export { getCircuitConfig } from './circuits';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 export { NodeArtifactProvider, WebArtifactProvider } from './providers';
-export type { ArtifactProvider, WebProviderOptions } from './providers';
+export type { ArtifactProvider, WebProviderOptions, ResolvedCircuitVersion } from './providers';
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 export { validateInputs, validatePublicSignals, validateProofSize } from './utils/validation';

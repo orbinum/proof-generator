@@ -9,6 +9,19 @@ const UNPKG_BASE = 'https://unpkg.com/@orbinum/circuits';
 const MANIFEST_URL = `${UNPKG_BASE}/manifest.json`;
 
 // ============================================================================
+// Integrity
+// ============================================================================
+
+/** Lowercase hex sha256 of the given bytes, via WebCrypto (browser + Node ≥ 20). */
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const copy = new Uint8Array(bytes);
+  const digest = await crypto.subtle.digest('SHA-256', copy);
+  return Array.from(new Uint8Array(digest))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// ============================================================================
 // Manifest types
 // ============================================================================
 
@@ -66,6 +79,19 @@ export type WebProviderOptions = {
   circuitVersions?: Partial<Record<string, number>>;
 };
 
+/**
+ * The circuit version the provider resolved to, plus the identifiers a consumer
+ * needs to cross-check integrity against the chain before proving.
+ */
+export type ResolvedCircuitVersion = {
+  /** The resolved circuit version (the override, else the manifest active version). */
+  version: number;
+  /** The `@orbinum/circuits` package version the artifacts are pinned to. */
+  packageVersion: string;
+  /** The on-chain VK hash the manifest declares for this version. */
+  vkHash: string;
+};
+
 // ============================================================================
 // WebArtifactProvider
 // ============================================================================
@@ -73,34 +99,24 @@ export type WebProviderOptions = {
 /**
  * Artifact provider for browser and mobile environments.
  *
- * Two modes:
- *   - **Legacy** (`new WebArtifactProvider('https://...')`) — appends artifact
- *     filenames directly to the given URL, no manifest fetch.
- *   - **Manifest** (`new WebArtifactProvider()` or `new WebArtifactProvider({...})`) —
- *     fetches `manifest.json` from the npm CDN (unpkg), resolves the exact
- *     artifact filename per circuit version, and pins artifact URLs to the
- *     `package_version` declared in the manifest. Supports per-circuit version
- *     overrides for backwards-compatible proof generation.
+ * Manifest-only: fetches `manifest.json` from the npm CDN (unpkg) or a
+ * `baseUrl` mirror, resolves the exact artifact filename per circuit version,
+ * pins artifact URLs to the manifest's `package_version`, and VERIFIES every
+ * downloaded artifact against the manifest's sha256 (fail-closed — a mismatch
+ * throws). Supports per-circuit version overrides for backwards-compatible proof
+ * generation. There is no unverified/manifest-less mode: every artifact is
+ * integrity-checked.
  */
 export class WebArtifactProvider implements ArtifactProvider {
-  private legacyBaseUrl: string | null = null;
   private manifestUrl: string;
   private circuitVersions: Partial<Record<string, number>>;
   private manifest: CircuitsManifest | null = null;
   private manifestPromise: Promise<CircuitsManifest> | null = null;
 
-  constructor(optionsOrUrl?: string | WebProviderOptions) {
-    if (typeof optionsOrUrl === 'string') {
-      // Legacy mode: direct URL, no manifest
-      this.legacyBaseUrl = optionsOrUrl.replace(/\/$/, '');
-      this.manifestUrl = '';
-      this.circuitVersions = {};
-    } else {
-      const opts = optionsOrUrl ?? {};
-      const base = opts.baseUrl?.replace(/\/$/, '');
-      this.manifestUrl = base ? `${base}/manifest.json` : MANIFEST_URL;
-      this.circuitVersions = opts.circuitVersions ?? {};
-    }
+  constructor(options?: WebProviderOptions) {
+    const base = options?.baseUrl?.replace(/\/$/, '');
+    this.manifestUrl = base ? `${base}/manifest.json` : MANIFEST_URL;
+    this.circuitVersions = options?.circuitVersions ?? {};
   }
 
   // ---------------------------------------------------------------------------
@@ -126,13 +142,19 @@ export class WebArtifactProvider implements ArtifactProvider {
   }
 
   // ---------------------------------------------------------------------------
-  // Artifact URL resolution via manifest
+  // Version resolution via manifest
   // ---------------------------------------------------------------------------
 
-  private async resolveArtifactUrl(
-    circuitType: CircuitType,
-    artifactType: 'wasm' | 'zkey' | 'ark'
-  ): Promise<string> {
+  /**
+   * Resolves the version + manifest data the provider will use for a circuit —
+   * the requested override, else the manifest's `active_version`. Throws if the
+   * circuit is missing or the version is unsupported (fail-closed).
+   */
+  private async resolveVersionData(circuitType: CircuitType): Promise<{
+    version: number;
+    versionData: ManifestCircuitVersion;
+    packageVersion: string;
+  }> {
     const manifest = await this.getManifest();
     const circuitName = circuitType as string;
     const circuitManifest = manifest.circuits[circuitName];
@@ -141,33 +163,61 @@ export class WebArtifactProvider implements ArtifactProvider {
       throw new Error(`Circuit "${circuitName}" not found in manifest`);
     }
 
-    const requestedVersion = this.circuitVersions[circuitName] ?? circuitManifest.active_version;
+    const version = this.circuitVersions[circuitName] ?? circuitManifest.active_version;
 
-    if (!circuitManifest.supported_versions.includes(requestedVersion)) {
+    if (!circuitManifest.supported_versions.includes(version)) {
       throw new Error(
-        `Circuit "${circuitName}" v${requestedVersion} is no longer supported. ` +
+        `Circuit "${circuitName}" v${version} is no longer supported. ` +
           `Supported versions: [${circuitManifest.supported_versions.join(', ')}]`
       );
     }
 
-    const versionData = circuitManifest.versions[String(requestedVersion)];
+    const versionData = circuitManifest.versions[String(version)];
     if (!versionData) {
-      throw new Error(`Circuit "${circuitName}" v${requestedVersion} not found in manifest`);
+      throw new Error(`Circuit "${circuitName}" v${version} not found in manifest`);
     }
 
-    const isCustomBase = this.manifestUrl !== MANIFEST_URL;
-    const artifactBase = isCustomBase
-      ? this.manifestUrl.replace(/\/manifest\.json$/, '')
-      : `${UNPKG_BASE}@${manifest.package_version}`;
+    return { version, versionData, packageVersion: manifest.package_version };
+  }
 
-    if (artifactType === 'ark') {
-      // Use the manifest entry if present; otherwise derive the filename by convention.
-      const filename = versionData.artifacts.ark?.file ?? `${circuitName}_pk.ark`;
-      return `${artifactBase}/${filename}`;
+  /**
+   * The version + package_version + vk_hash the provider will use for a circuit.
+   * Public so a consumer (SDK) can cross-check the vk_hash against the chain's
+   * active VK before generating a proof.
+   */
+  async getResolvedVersion(circuitType: CircuitType): Promise<ResolvedCircuitVersion> {
+    const { version, versionData, packageVersion } = await this.resolveVersionData(circuitType);
+    return { version, packageVersion, vkHash: versionData.vk_hash };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Artifact URL resolution via manifest
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The base URL artifacts are served from. A custom `baseUrl` mirror serves
+   * them next to its manifest; the default (unpkg) pins them to the manifest's
+   * `package_version` for an immutable, cacheable URL.
+   */
+  private artifactBase(packageVersion: string): string {
+    if (this.manifestUrl !== MANIFEST_URL) {
+      return this.manifestUrl.replace(/\/manifest\.json$/, '');
     }
+    return `${UNPKG_BASE}@${packageVersion}`;
+  }
 
-    const filename = versionData.artifacts[artifactType].file;
-    return `${artifactBase}/${filename}`;
+  /** Resolves the URL + expected sha256 for one artifact of a circuit. */
+  private async resolveArtifact(
+    circuitType: CircuitType,
+    artifactType: 'wasm' | 'zkey' | 'ark'
+  ): Promise<{ url: string; sha256: string }> {
+    const { versionData, packageVersion } = await this.resolveVersionData(circuitType);
+
+    const entry = versionData.artifacts[artifactType];
+    if (!entry) {
+      throw new Error(`Circuit "${circuitType}" has no "${artifactType}" artifact in the manifest`);
+    }
+    return { url: `${this.artifactBase(packageVersion)}/${entry.file}`, sha256: entry.sha256 };
   }
 
   // ---------------------------------------------------------------------------
@@ -175,31 +225,39 @@ export class WebArtifactProvider implements ArtifactProvider {
   // ---------------------------------------------------------------------------
 
   async getCircuitWasm(type: CircuitType): Promise<Uint8Array> {
-    if (this.legacyBaseUrl !== null) {
-      return this.fetchArtifact(`${this.legacyBaseUrl}/${type.toLowerCase()}.wasm`);
-    }
-    return this.fetchArtifact(await this.resolveArtifactUrl(type, 'wasm'));
+    const { url, sha256 } = await this.resolveArtifact(type, 'wasm');
+    return this.fetchArtifact(url, sha256);
   }
 
   async getCircuitZkey(type: CircuitType): Promise<Uint8Array> {
-    if (this.legacyBaseUrl !== null) {
-      return this.fetchArtifact(`${this.legacyBaseUrl}/${type.toLowerCase()}_pk.zkey`);
-    }
-    return this.fetchArtifact(await this.resolveArtifactUrl(type, 'zkey'));
+    const { url, sha256 } = await this.resolveArtifact(type, 'zkey');
+    return this.fetchArtifact(url, sha256);
   }
 
   async getCircuitProvingKey(type: CircuitType): Promise<Uint8Array> {
-    if (this.legacyBaseUrl !== null) {
-      return this.fetchArtifact(`${this.legacyBaseUrl}/${type.toLowerCase()}_pk.ark`);
-    }
-    return this.fetchArtifact(await this.resolveArtifactUrl(type, 'ark'));
+    const { url, sha256 } = await this.resolveArtifact(type, 'ark');
+    return this.fetchArtifact(url, sha256);
   }
 
-  private async fetchArtifact(url: string): Promise<Uint8Array> {
+  /**
+   * Fetches an artifact and verifies the downloaded bytes against the manifest's
+   * sha256 — fail-closed: a mismatch throws and no bytes are returned (guards
+   * against a tampered/stale CDN). Every artifact is verified; there is no
+   * unchecked path.
+   */
+  private async fetchArtifact(url: string, expectedSha256: string): Promise<Uint8Array> {
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch circuit artifact: ${url} (${response.status})`);
     }
-    return new Uint8Array(await response.arrayBuffer());
+    const bytes = new Uint8Array(await response.arrayBuffer());
+
+    const actual = await sha256Hex(bytes);
+    if (actual !== expectedSha256.toLowerCase()) {
+      throw new Error(
+        `Integrity check failed for ${url}: expected sha256 ${expectedSha256}, got ${actual}`
+      );
+    }
+    return bytes;
   }
 }

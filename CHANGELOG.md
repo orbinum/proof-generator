@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`WebArtifactProvider` legacy-URL mode** (the `new WebArtifactProvider('https://...')` string constructor): it fetched artifacts by filename convention with no manifest, so there was no sha256/vk_hash to verify — an unchecked path that contradicts fail-closed integrity. **Breaking:** construct with `new WebArtifactProvider()` or `new WebArtifactProvider({ baseUrl })` instead; a mirror is now a `baseUrl` that must serve a `manifest.json`. Every artifact is now integrity-checked, with no exceptions.
+
 ### Added
 
+- **`WebArtifactProvider.getResolvedVersion(circuit)`** (`src/providers/web.ts`): public getter returning a `ResolvedCircuitVersion` (`{version, packageVersion, vkHash}`) — the version the provider will actually use for a circuit (the override or the manifest's `active_version`), so a consumer (SDK) can cross-check the `vkHash` against the chain's active VK before proving. New exported type `ResolvedCircuitVersion`.
+- **Artifact integrity verification** (`src/providers/web.ts`): every downloaded wasm/zkey/ark is now sha256-verified against the manifest — a mismatch (tampered/stale CDN) throws and returns no bytes (fail-closed). An artifact absent from the manifest (so no sha256 to check) throws rather than being derived by convention.
 - **`CIRCUIT_ID` map + `circuitTypeToId()`** (`src/circuits/types.ts`): single source of truth mapping each `CircuitType` to its on-chain numeric id, matching the node's `CircuitId` constants (Transfer=1, Unshield=2, PrivateLink=5, ValueProof=6). `circuitTypeToId` fails closed — an unknown circuit throws rather than defaulting to 0. An anti-drift test (`tests/circuits/circuit-id.test.ts`) locks the mapping to the node's values (VALUE_PROOF=6 is the non-obvious one). Groundwork for per-note circuit-version resolution.
 
 ## [3.7.0] - 2026-05-14

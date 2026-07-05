@@ -15,6 +15,12 @@ import { CircuitType } from '../../src/circuits/types';
 
 const MOCK_PKG_VERSION = '0.4.4';
 
+// The manifest-mode tests mock every artifact fetch as 8 zero bytes
+// (`new ArrayBuffer(8)`); this is their real sha256, so the integrity check
+// passes. A dedicated integrity test below uses a different value to prove a
+// mismatch throws.
+const ZERO8_SHA = 'af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc';
+
 function buildMockManifest(overrides?: {
   unshieldActiveVersion?: number;
   supportedVersions?: number[];
@@ -33,22 +39,26 @@ function buildMockManifest(overrides?: {
             version: 1,
             vk_hash: '0x73401aa0',
             artifacts: {
-              wasm: { file: 'unshield.wasm', bytes: 2396830, sha256: 'aaa' },
-              zkey: { file: 'unshield_pk.zkey', bytes: 5326768, sha256: 'bbb' },
-              vk_json: { file: 'verification_key_unshield.json', bytes: 3657, sha256: 'ccc' },
-              r1cs: { file: 'unshield.r1cs', bytes: 1584412, sha256: 'ddd' },
-              ark: { file: 'unshield_pk.ark', bytes: 192, sha256: 'eee' },
+              wasm: { file: 'unshield.wasm', bytes: 2396830, sha256: ZERO8_SHA },
+              zkey: { file: 'unshield_pk.zkey', bytes: 5326768, sha256: ZERO8_SHA },
+              vk_json: { file: 'verification_key_unshield.json', bytes: 3657, sha256: ZERO8_SHA },
+              r1cs: { file: 'unshield.r1cs', bytes: 1584412, sha256: ZERO8_SHA },
+              ark: { file: 'unshield_pk.ark', bytes: 192, sha256: ZERO8_SHA },
             },
           },
           '2': {
             version: 2,
             vk_hash: '0xdeadbeef',
             artifacts: {
-              wasm: { file: 'unshield_v2.wasm', bytes: 2500000, sha256: 'eee' },
-              zkey: { file: 'unshield_v2_pk.zkey', bytes: 6000000, sha256: 'fff' },
-              vk_json: { file: 'verification_key_unshield_v2.json', bytes: 3700, sha256: 'ggg' },
-              r1cs: { file: 'unshield_v2.r1cs', bytes: 1700000, sha256: 'hhh' },
-              ark: { file: 'unshield_v2_pk.ark', bytes: 192, sha256: 'iii' },
+              wasm: { file: 'unshield_v2.wasm', bytes: 2500000, sha256: ZERO8_SHA },
+              zkey: { file: 'unshield_v2_pk.zkey', bytes: 6000000, sha256: ZERO8_SHA },
+              vk_json: {
+                file: 'verification_key_unshield_v2.json',
+                bytes: 3700,
+                sha256: ZERO8_SHA,
+              },
+              r1cs: { file: 'unshield_v2.r1cs', bytes: 1700000, sha256: ZERO8_SHA },
+              ark: { file: 'unshield_v2_pk.ark', bytes: 192, sha256: ZERO8_SHA },
             },
           },
         },
@@ -61,10 +71,10 @@ function buildMockManifest(overrides?: {
             version: 1,
             vk_hash: '0x2ab60d15',
             artifacts: {
-              wasm: { file: 'transfer.wasm', bytes: 3359868, sha256: 'iii' },
-              zkey: { file: 'transfer_pk.zkey', bytes: 20484784, sha256: 'jjj' },
-              vk_json: { file: 'verification_key_transfer.json', bytes: 3658, sha256: 'kkk' },
-              r1cs: { file: 'transfer.r1cs', bytes: 6629624, sha256: 'lll' },
+              wasm: { file: 'transfer.wasm', bytes: 3359868, sha256: ZERO8_SHA },
+              zkey: { file: 'transfer_pk.zkey', bytes: 20484784, sha256: ZERO8_SHA },
+              vk_json: { file: 'verification_key_transfer.json', bytes: 3658, sha256: ZERO8_SHA },
+              r1cs: { file: 'transfer.r1cs', bytes: 6629624, sha256: ZERO8_SHA },
             },
           },
         },
@@ -82,71 +92,6 @@ function mockManifestThenArtifact() {
       .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
   );
 }
-
-// ─── Legacy mode ─────────────────────────────────────────────────────────────
-
-describe('WebArtifactProvider — legacy mode (string URL)', () => {
-  const baseUrl = 'https://test.orbinum.com/circuits';
-
-  beforeEach(() => {
-    vi.unstubAllGlobals();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
-    );
-  });
-
-  it('constructs correct WASM URL', async () => {
-    const provider = new WebArtifactProvider(baseUrl);
-    await provider.getCircuitWasm(CircuitType.Unshield);
-
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(
-      'https://test.orbinum.com/circuits/unshield.wasm'
-    );
-  });
-
-  it('constructs correct zkey URL', async () => {
-    const provider = new WebArtifactProvider(baseUrl);
-    await provider.getCircuitZkey(CircuitType.Transfer);
-
-    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(
-      'https://test.orbinum.com/circuits/transfer_pk.zkey'
-    );
-  });
-
-  it('constructs correct .ark URL', async () => {
-    const provider = new WebArtifactProvider(baseUrl);
-    await provider.getCircuitProvingKey!(CircuitType.Unshield);
-
-    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(
-      'https://test.orbinum.com/circuits/unshield_pk.ark'
-    );
-  });
-
-  it('throws on failed fetch', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
-    const provider = new WebArtifactProvider(baseUrl);
-
-    await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
-      'Failed to fetch circuit artifact'
-    );
-  });
-
-  it('strips trailing slash from base URL', async () => {
-    const provider = new WebArtifactProvider('https://slash.com/');
-    await provider.getCircuitWasm(CircuitType.Unshield);
-
-    const url = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(url).toBe('https://slash.com/unshield.wasm');
-  });
-
-  it('returns Uint8Array from ArrayBuffer', async () => {
-    const provider = new WebArtifactProvider(baseUrl);
-    const result = await provider.getCircuitWasm(CircuitType.Unshield);
-    expect(result).toBeInstanceOf(Uint8Array);
-  });
-});
 
 // ─── Manifest mode ────────────────────────────────────────────────────────────
 
@@ -318,21 +263,18 @@ describe('WebArtifactProvider — manifest mode (npm CDN)', () => {
     );
   });
 
-  it('derives .ark filename by convention when manifest has no ark entry', async () => {
-    // transfer circuit in the mock manifest has no ark entry
+  it('throws for an artifact with no manifest entry (fail-closed, no unverified derive)', async () => {
+    // transfer circuit in the mock manifest has no ark entry → cannot be
+    // integrity-checked, so it must not be served.
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce({ ok: true, json: async () => buildMockManifest() })
-        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
+      vi.fn().mockResolvedValue({ ok: true, json: async () => buildMockManifest() })
     );
 
     const provider = new WebArtifactProvider();
-    await provider.getCircuitProvingKey!(CircuitType.Transfer);
-
-    const url = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0];
-    expect(url).toBe(`https://unpkg.com/@orbinum/circuits@${MOCK_PKG_VERSION}/transfer_pk.ark`);
+    await expect(provider.getCircuitProvingKey!(CircuitType.Transfer)).rejects.toThrow(
+      /no "ark" artifact/
+    );
   });
 
   it('getCircuitProvingKey returns Uint8Array', async () => {
@@ -347,5 +289,73 @@ describe('WebArtifactProvider — manifest mode (npm CDN)', () => {
     const provider = new WebArtifactProvider();
     const result = await provider.getCircuitProvingKey!(CircuitType.Unshield);
     expect(result).toBeInstanceOf(Uint8Array);
+  });
+});
+
+// ─── Integrity (sha256) + getResolvedVersion (Phase 1) ────────────────────────
+
+describe('WebArtifactProvider — integrity + resolved version', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('verifies downloaded bytes against the manifest sha256 (passes on match)', async () => {
+    mockManifestThenArtifact(); // artifact = 8 zero bytes, manifest sha256 = ZERO8_SHA
+    const provider = new WebArtifactProvider();
+    await expect(provider.getCircuitWasm(CircuitType.Unshield)).resolves.toBeInstanceOf(Uint8Array);
+  });
+
+  it('throws on a sha256 mismatch (tampered/stale CDN) and returns no bytes', async () => {
+    // Manifest declares ZERO8_SHA, but the artifact fetch returns different bytes.
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => buildMockManifest() })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(16) })
+    );
+    const provider = new WebArtifactProvider();
+    await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
+      /Integrity check failed/
+    );
+  });
+
+  it('getResolvedVersion returns version + package_version + vk_hash', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => buildMockManifest() })
+    );
+    const provider = new WebArtifactProvider();
+    const resolved = await provider.getResolvedVersion(CircuitType.Unshield);
+    expect(resolved).toEqual({
+      version: 1,
+      packageVersion: MOCK_PKG_VERSION,
+      vkHash: '0x73401aa0',
+    });
+  });
+
+  it('getResolvedVersion honors a circuitVersions override', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => buildMockManifest({ supportedVersions: [1, 2] }),
+      })
+    );
+    const provider = new WebArtifactProvider({ circuitVersions: { unshield: 2 } });
+    const resolved = await provider.getResolvedVersion(CircuitType.Unshield);
+    expect(resolved.version).toBe(2);
+    expect(resolved.vkHash).toBe('0xdeadbeef');
+  });
+
+  it('getResolvedVersion throws for an unsupported version (fail-closed)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => buildMockManifest() })
+    );
+    const provider = new WebArtifactProvider({ circuitVersions: { unshield: 2 } }); // supported: [1]
+    await expect(provider.getResolvedVersion(CircuitType.Unshield)).rejects.toThrow(
+      /no longer supported/
+    );
   });
 });
