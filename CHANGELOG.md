@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`CIRCUIT_ID` map + `circuitTypeToId()`** (`src/circuits/types.ts`): single source of truth mapping each `CircuitType` to its on-chain numeric id, matching the node's `CircuitId` constants (Transfer=1, Unshield=2, PrivateLink=5, ValueProof=6). `circuitTypeToId` fails closed — an unknown circuit throws rather than defaulting to 0. An anti-drift test (`tests/circuits/circuit-id.test.ts`) locks the mapping to the node's values (VALUE_PROOF=6 is the non-obvious one). Groundwork for per-note circuit-version resolution.
+
 ## [3.7.0] - 2026-05-14
 
 ### Added
