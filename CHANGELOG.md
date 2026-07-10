@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-07-10
+
 ### Removed
 
 - **`WebArtifactProvider` legacy-URL mode** (the `new WebArtifactProvider('https://...')` string constructor): it fetched artifacts by filename convention with no manifest, so there was no sha256/vk_hash to verify — an unchecked path that contradicts fail-closed integrity. **Breaking:** construct with `new WebArtifactProvider()` or `new WebArtifactProvider({ baseUrl })` instead; a mirror is now a `baseUrl` that must serve a `manifest.json`. Every artifact is now integrity-checked, with no exceptions.
