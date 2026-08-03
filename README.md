@@ -57,13 +57,12 @@ Benchmarked on Apple M-series (Node.js, 3 runs post-warmup):
 | Circuit | snarkjs backend | arkworks backend | First call overhead |
 |---------|----------------|-----------------|---------------------|
 | ValueProof | ~91ms | ~262ms | +1.5–2s (WASM init) |
-| PrivateLink | ~73ms | ~234ms | +1.5–2s (WASM init) |
 | Unshield | ~407ms | ~2.1s | +1.5–2s (WASM init) |
 | Transfer | ~1.1s | ~7.2s | +1.5–2s (WASM init) |
 
 > **snarkjs backend** (default): uses snarkjs `fullProve` with `.zkey` proving keys — fastest option post-warmup.
 >
-> **arkworks backend**: uses snarkjs witness-only + arkworks WASM with `.ark` proving keys — ~3× slower for small circuits (ValueProof, PrivateLink), ~5× slower for large circuits (Unshield, Transfer). `.ark` artifacts are 2–3× smaller than `.zkey`.
+> **arkworks backend**: uses snarkjs witness-only + arkworks WASM with `.ark` proving keys — ~3× slower for small circuits (ValueProof), ~5× slower for large circuits (Unshield, Transfer). `.ark` artifacts are 2–3× smaller than `.zkey`.
 
 The first proof call in a process incurs the WASM initialization overhead (~1.5–2s). All subsequent proofs skip this.
 
@@ -73,8 +72,6 @@ The first proof call in a process incurs the WASM initialization overhead (~1.5�
 |---------|---------|------|---------|-----------|-------|----------|-------|
 | ValueProof | snarkjs | 9ms | — | — | 91ms | — | 100ms |
 | ValueProof | arkworks | — | 24ms | 3ms | 234ms | — | 262ms |
-| PrivateLink | snarkjs | 8ms | — | — | 75ms | — | 83ms |
-| PrivateLink | arkworks | 2ms | 14ms | 2ms | 216ms | — | 234ms |
 | Unshield | snarkjs | 21ms | — | — | 367ms | — | 388ms |
 | Unshield | arkworks | 8ms | 28ms | 26ms | 1965ms | — | 2027ms |
 | Transfer | snarkjs | 54ms | — | — | 1094ms | — | 1148ms |
@@ -89,7 +86,6 @@ The first proof call in a process incurs the WASM initialization overhead (~1.5�
 | Unshield    | Withdraw from pool to public address             |
 | Transfer    | Private-to-private transfer                      |
 | ValueProof  | Prove note value without revealing full details  |
-| PrivateLink | Privacy-preserving cross-chain identity dispatch |
 
 ## Related Packages
 

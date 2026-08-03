@@ -169,7 +169,6 @@ enum CircuitType {
   Unshield = 'unshield', // Withdrawal to public address
   Transfer = 'transfer', // Private transfer
   ValueProof = 'value_proof', // Prove note value (commitment binding)
-  PrivateLink = 'private_link', // Privacy-preserving cross-chain identity dispatch
 }
 ```
 
@@ -181,7 +180,6 @@ import { CircuitType } from '@orbinum/proof-generator';
 await generateProof(CircuitType.Unshield, inputs);
 await generateProof(CircuitType.Transfer, inputs);
 await generateProof(CircuitType.ValueProof, inputs);
-await generateProof(CircuitType.PrivateLink, inputs);
 ```
 
 ## Providers
@@ -279,7 +277,6 @@ try {
 | **Unshield**    | 5              | `merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, note fields, `path_*` | Withdraw from pool to public address             |
 | **Transfer**    | 5              | `merkle_root`, input/output nullifiers and commitments, note fields, `path_*`        | Private-to-private transfer                      |
 | **ValueProof**  | 4              | `commitment`, `value`, `asset_id`, `owner_hash`, note fields                        | Prove note value without revealing extra state   |
-| **PrivateLink** | 2              | `commitment`, `call_hash_fe`                                                         | Privacy-preserving cross-chain identity dispatch |
 
 ### Output Format
 
@@ -307,7 +304,6 @@ See [docs/backends.md](backends.md) for a full benchmark analysis.
 | Unshield | ~1.3 s | ~7 s |
 | Transfer | ~4.7 s | ~20 s |
 | ValueProof | ~1.1 s | ~5 s |
-| PrivateLink | ~0.7 s | ~3 s |
 ```
 
 - **snarkjs** — default, fastest, uses `.zkey` proving keys
@@ -414,7 +410,6 @@ Proof generation is compute-intensive. Expected times:
 - **Unshield**: ~1.5s
 - **Transfer**: ~3s
 - **ValueProof**: ~0.8s
-- **PrivateLink**: ~0.7s
 
 For faster proofs, ensure:
 

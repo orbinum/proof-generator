@@ -26,8 +26,6 @@ function getExpectedPublicSignals(circuitType: CircuitType): number {
     case CircuitType.ValueProof:
       // [commitment, value, asset_id, owner_hash]
       return 4;
-    case CircuitType.PrivateLink:
-      return 2;
     default:
       throw new Error(`Unknown circuit type: ${circuitType}`);
   }

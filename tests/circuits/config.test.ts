@@ -23,17 +23,8 @@ describe('getCircuitConfig', () => {
     expect(config.expectedPublicSignals).toBe(7);
   });
 
-  it('returns correct config for PrivateLink', () => {
-    const config = getCircuitConfig(CircuitType.PrivateLink);
-    expect(config.name).toBe('private_link');
-    expect(config.wasmPath).toBe('private_link.wasm');
-    expect(config.zkeyPath).toBe('private_link_pk.zkey');
-    expect(config.provingKeyPath).toBe('private_link_pk.ark');
-    expect(config.expectedPublicSignals).toBe(2);
-  });
-
   it('all configs have name, wasmPath, zkeyPath, provingKeyPath, expectedPublicSignals', () => {
-    const types = [CircuitType.Unshield, CircuitType.Transfer, CircuitType.PrivateLink];
+    const types = [CircuitType.Unshield, CircuitType.Transfer, CircuitType.ValueProof];
     for (const type of types) {
       const config = getCircuitConfig(type);
       expect(config.name).toBeTruthy();

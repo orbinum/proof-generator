@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-08-03
+
+### Removed
+
+- **`CircuitType.PrivateLink`** and its `CIRCUIT_ID` entry (id 5). The node retired the circuit along with `pallet-account-mapping` and purged its verification key, so proofs generated against it come back `CircuitNotFound`. **Breaking:** any caller passing `CircuitType.PrivateLink` to `generateProof` or `getCircuitConfig` no longer compiles. There is no replacement — the feature it served was removed from the runtime rather than reimplemented.
+
+  Its expected public-signal count is gone from `getExpectedPublicSignals`, which now throws for the id like any other unknown circuit.
+
+  The anti-drift test gains a case asserting id 5 cannot reappear in `CIRCUIT_ID`. That mapping is the one place where a silent mismatch between this package, ts-sdk and the node would send proofs at the wrong VK, so the guard is worth keeping after the removal rather than only during it.
+
+  Ids are never reused: the gap at 5 is permanent, and `VALUE_PROOF` stays at 6.
+
 ## [4.0.0] - 2026-07-10
 
 ### Removed

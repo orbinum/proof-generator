@@ -65,7 +65,6 @@ See [backends.md](./backends.md) for a full comparison of speed and artifact siz
 | Unshield | `CircuitType.Unshield` | 7 | Withdraw from pool to public address |
 | Transfer | `CircuitType.Transfer` | 7 | Private-to-private transfer |
 | ValueProof | `CircuitType.ValueProof` | 4 | Prove note value and ownership without revealing the spending key |
-| PrivateLink | `CircuitType.PrivateLink` | 2 | Privacy-preserving cross-chain identity |
 
 ---
 
