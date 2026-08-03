@@ -30,9 +30,6 @@ beforeAll(() => {
     'value_proof.wasm',
     'value_proof_pk.zkey',
     'value_proof_pk.ark',
-    'private_link.wasm',
-    'private_link_pk.zkey',
-    'private_link_pk.ark',
   ];
   for (const file of artifacts) {
     fs.writeFileSync(path.join(tmpDir, file), Buffer.from(`fake-${file}`));
@@ -70,9 +67,9 @@ describe('NodeArtifactProvider', () => {
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
-  it('reads WASM file for PrivateLink circuit', async () => {
+  it('reads WASM file for ValueProof circuit', async () => {
     const provider = new NodeArtifactProvider(tmpDir);
-    const result = await provider.getCircuitWasm(CircuitType.PrivateLink);
+    const result = await provider.getCircuitWasm(CircuitType.ValueProof);
     expect(result).toBeInstanceOf(Uint8Array);
   });
 
@@ -110,12 +107,7 @@ describe('NodeArtifactProvider', () => {
 
   it('reads .ark proving key for all circuit types', async () => {
     const provider = new NodeArtifactProvider(tmpDir);
-    const types = [
-      CircuitType.Unshield,
-      CircuitType.Transfer,
-      CircuitType.ValueProof,
-      CircuitType.PrivateLink,
-    ];
+    const types = [CircuitType.Unshield, CircuitType.Transfer, CircuitType.ValueProof];
     for (const type of types) {
       const result = await provider.getCircuitProvingKey!(type);
       expect(result).toBeInstanceOf(Uint8Array);

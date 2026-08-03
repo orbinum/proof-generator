@@ -331,9 +331,6 @@ node_modules/
 │   ├── value_proof.wasm
 │   ├── value_proof_pk.ark
 │   ├── value_proof_pk.zkey
-│   ├── private_link.wasm
-│   ├── private_link_pk.ark
-│   └── private_link_pk.zkey
 └── @orbinum/groth16-proofs/
     ├── groth16_proofs_bg.wasm
     ├── groth16_proofs.js
