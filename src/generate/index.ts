@@ -6,8 +6,10 @@ import { GenerateOptions } from './types';
 import { resolveProvider } from './provider';
 import { runSnarkjsBackend } from './backends/snarkjs';
 import { runArkworksBackend } from './backends/arkworks';
+import { shouldProveSingleThreaded } from './environment';
 
 export type { GenerateOptions } from './types';
+export { shouldProveSingleThreaded } from './environment';
 
 export async function generateProof(
   circuitType: CircuitType,
@@ -15,6 +17,7 @@ export async function generateProof(
   options: GenerateOptions = {}
 ): Promise<ProofResult> {
   const { verbose = false, backend = 'snarkjs' } = options;
+  const singleThread = options.singleThread ?? shouldProveSingleThreaded();
   const provider = resolveProvider(options.provider);
   const config = getCircuitConfig(circuitType);
 
@@ -33,7 +36,7 @@ export async function generateProof(
   const proofResult =
     backend === 'arkworks'
       ? await runArkworksBackend(circuitType, inputs, provider, config, verbose)
-      : await runSnarkjsBackend(circuitType, inputs, provider, config, verbose);
+      : await runSnarkjsBackend(circuitType, inputs, provider, config, verbose, singleThread);
 
   try {
     validatePublicSignals(proofResult.publicSignals, config.expectedPublicSignals);

@@ -16,7 +16,8 @@ export async function runSnarkjsBackend(
   inputs: CircuitInputs,
   provider: ArtifactProvider,
   config: CircuitConfig,
-  verbose: boolean
+  verbose: boolean,
+  singleThread = false
 ): Promise<{ proof: string; publicSignals: string[] }> {
   let wasmBinary: Uint8Array | string;
   let zkeyBinary: Uint8Array | string;
@@ -33,13 +34,21 @@ export async function runSnarkjsBackend(
     throw new CircuitNotFoundError(circuitType);
   }
 
-  if (verbose) console.log('[proof-generator] Step 1: Generating witness + proof with snarkjs...');
+  if (verbose) {
+    console.log(
+      `[proof-generator] Step 1: Generating witness + proof with snarkjs` +
+        `${singleThread ? ' (single-threaded)' : ''}...`
+    );
+  }
 
   try {
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(
       inputs,
       wasmBinary,
-      zkeyBinary
+      zkeyBinary,
+      undefined,
+      undefined,
+      { singleThread }
     );
 
     const compressedProofHex = await compressSnarkjsProofWasm(proof as any);

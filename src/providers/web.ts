@@ -114,7 +114,7 @@ export class WebArtifactProvider implements ArtifactProvider {
   private manifestPromise: Promise<CircuitsManifest> | null = null;
 
   constructor(options?: WebProviderOptions) {
-    const base = options?.baseUrl?.replace(/\/$/, '');
+    const base = options?.baseUrl?.replace(/\/$/, '').replace(/\/manifest\.json$/, '');
     this.manifestUrl = base ? `${base}/manifest.json` : MANIFEST_URL;
     this.circuitVersions = options?.circuitVersions ?? {};
   }
