@@ -238,3 +238,77 @@ describe('generateProof — arkworks backend', () => {
     ).rejects.toBeInstanceOf(InvalidInputsError);
   });
 });
+
+/**
+ * Single-threaded proving — the mobile fix.
+ *
+ * snarkjs takes `proverOptions` as its SIXTH positional argument and forwards
+ * `singleThread` to `buildBn128`, which is what stops `ffjavascript` from
+ * spawning one Worker per core. The position matters: passing the object in the
+ * wrong slot is silently ignored, so these tests assert the argument index and
+ * not merely that the call happened.
+ */
+describe('generateProof — singleThread', () => {
+  let provider: ArtifactProvider;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    provider = makeSnarkjsProvider();
+  });
+
+  /** The `proverOptions` snarkjs received on the last call. */
+  async function proverOptionsFromLastCall(): Promise<unknown> {
+    const snarkjs = await import('snarkjs');
+    const call = (snarkjs.groth16.fullProve as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0];
+    return call?.[5];
+  }
+
+  it('forwards singleThread: true in the proverOptions slot', async () => {
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider, singleThread: true });
+
+    expect(await proverOptionsFromLastCall()).toEqual({ singleThread: true });
+  });
+
+  it('forwards singleThread: false when the caller opts out explicitly', async () => {
+    // An explicit `false` must survive: a desktop app that measured its own
+    // environment should never be silently downgraded by the heuristic.
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider, singleThread: false });
+
+    expect(await proverOptionsFromLastCall()).toEqual({ singleThread: false });
+  });
+
+  it('still passes proverOptions when the caller says nothing', async () => {
+    // Absent means "let the device decide" — the option object is always sent,
+    // so snarkjs never falls back to its own default path.
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider });
+
+    expect(await proverOptionsFromLastCall()).toMatchObject({
+      singleThread: expect.any(Boolean),
+    });
+  });
+
+  it('leaves the logger and witness-calculator slots untouched', async () => {
+    // Those two arguments belong to snarkjs; overriding them by accident would
+    // change witness calculation rather than thread count.
+    const snarkjs = await import('snarkjs');
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider, singleThread: true });
+
+    const call = (snarkjs.groth16.fullProve as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0];
+    expect(call?.[3]).toBeUndefined();
+    expect(call?.[4]).toBeUndefined();
+  });
+
+  it('does not reach snarkjs at all on the arkworks backend', async () => {
+    // arkworks is single-threaded already; the option is meaningless there.
+    const snarkjs = await import('snarkjs');
+    await generateProof(CircuitType.Unshield, VALID_INPUTS, {
+      provider: makeArkworksProvider(),
+      backend: 'arkworks',
+      singleThread: true,
+    });
+
+    expect(snarkjs.groth16.fullProve).not.toHaveBeenCalled();
+  });
+});

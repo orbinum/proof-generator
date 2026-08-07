@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-08-07
+
+### Added
+
+- **`GenerateOptions.singleThread`** and **`shouldProveSingleThreaded()`** (`src/generate/environment.ts`): prove on one thread instead of one Web Worker per logical core.
+
+  A user on Android reported `Unshield failed: Failed to execute 'postMessage' on 'Worker': Data cannot be cloned, out of memory.` snarkjs parallelises curve arithmetic through `ffjavascript`, whose `threadman.js` sets `concurrency = navigator.hardwareConcurrency` with no ceiling below 64 — one Worker per core, each carrying its own `WebAssembly.Memory`. On a phone that is typically 8 heaps against a per-tab budget a fraction of a desktop's, and transferring the WASM buffer fails outright. The same build proves fine on desktop, which is what makes this a platform limit rather than a logic bug.
+
+  `singleThread` is forwarded to snarkjs as `proverOptions` (the sixth positional argument of `groth16.fullProve`), which passes it to `buildBn128`. The proof is byte-identical either way — only slower, since the multi-scalar multiplication no longer spreads across cores. Ignored by the `arkworks` backend, which is single-threaded already.
+
+  Left absent, the value comes from `shouldProveSingleThreaded()`: true when `navigator.deviceMemory` is 4 GiB or less, or when the user agent is mobile — Firefox and Safari do not implement `deviceMemory`, so the UA is the only remaining signal on the platforms that need it most. An explicit `false` is respected, so a caller that measured its own environment is never silently downgraded.
+
+  The heuristic errs toward single-threaded deliberately: a false positive costs a slower proof, a false negative costs a proof that never completes.
+
 ## [5.0.0] - 2026-08-03
 
 ### Removed

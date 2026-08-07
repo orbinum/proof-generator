@@ -6,7 +6,7 @@
  */
 
 // ── Core API ─────────────────────────────────────────────────────────────────
-export { generateProof, type GenerateOptions } from './generate';
+export { generateProof, shouldProveSingleThreaded, type GenerateOptions } from './generate';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export * from './circuits/types';
