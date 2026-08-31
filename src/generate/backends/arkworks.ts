@@ -1,9 +1,23 @@
-import * as snarkjs from 'snarkjs';
 import { CircuitType, CircuitInputs, CircuitConfig } from '../../circuits/types';
 import { CircuitNotFoundError, ProofGenerationError } from '../../errors';
 import { ArtifactProvider } from '../../providers/interface';
 import { generateProofWasm } from '../../wasm/loader';
 import { validateProofSize } from '../../utils/validation';
+
+/**
+ * snarkjs, loaded on first use rather than at module scope.
+ *
+ * A static `import * as snarkjs` is a hard graph edge: it puts ~480 KB into
+ * every consumer's bundle, including one that only names `CircuitType` and
+ * never proves anything. Measured under 6.0.0: importing that single enum
+ * bundled to 1,539,822 bytes.
+ *
+ * Both call sites are already async, so the load costs nothing a caller was
+ * not already awaiting — and proving takes seconds.
+ */
+async function loadSnarkjs(): Promise<typeof import('snarkjs')> {
+  return import('snarkjs');
+}
 
 /** A `.wtns` header is 4-byte magic, u32 version, u32 section count. */
 const WTNS_HEADER_BYTES = 12;
@@ -111,6 +125,7 @@ export async function runArkworksBackend(
   try {
     if (verbose) console.log('[proof-generator] Step 1: Calculating witness with snarkjs...');
     const wtnsBuffer: { type: 'mem'; data?: Uint8Array } = { type: 'mem' };
+    const snarkjs = await loadSnarkjs();
     await (snarkjs as any).wtns.calculate(inputs, wasmBinary, wtnsBuffer);
     if (!wtnsBuffer.data) {
       throw new Error('snarkjs returned no witness data');

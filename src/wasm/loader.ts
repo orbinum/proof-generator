@@ -7,16 +7,17 @@
  * accepted by `pallet-zk-verifier` on-chain.
  */
 
-// The CDN URL carries the exact version of the wasm this package was built
-// against, read from the dependency's own manifest so the two cannot drift.
+// The version of the wasm this package was built against, inlined at build
+// time by tsup's `define` (see tsup.config.ts).
 //
-// Note this is a runtime require in the CommonJS output, not an inlined
-// constant — `resolveJsonModule` type-checks the import but tsc still emits
-// `require('@orbinum/groth16-proofs/package.json')`. It resolves because the
-// dependency declares no `exports` map; were it to add one without a
-// `"./package.json"` entry, this import would stop resolving under bundlers
-// that honour it. `tests/environments/bundling.test.ts` pins that assumption.
-import groth16pkg from '@orbinum/groth16-proofs/package.json';
+// It used to be `import groth16pkg from '@orbinum/groth16-proofs/package.json'`.
+// That works in CommonJS and fails in ESM: Node requires an import attribute
+// (`with { type: 'json' }`) for JSON modules, so the ESM build threw
+// `ERR_IMPORT_ATTRIBUTE_MISSING` on load — before any function ran. Inlining
+// also removes the assumption that the dependency exposes its manifest at all,
+// which an `exports` map without a `"./package.json"` entry would break.
+declare const __GROTH16_VERSION__: string;
+import { getNodeRequire } from '../internal/nodeRequire';
 
 interface SnarkjsProofLike {
   pi_a: Array<string | number>;
@@ -24,10 +25,12 @@ interface SnarkjsProofLike {
   pi_c: Array<string | number>;
 }
 
-// CDN URL pattern for the WASM binary.
-// `groth16pkg.version` is resolved at build time from the installed package.json,
-// so this stays in sync automatically whenever the dependency is upgraded.
-const GROTH16_WASM_CDN = `https://unpkg.com/@orbinum/groth16-proofs@${groth16pkg.version}/groth16_proofs_bg.wasm`;
+// CDN URL for the WASM binary, pinned to the exact version this package was
+// built against. `__GROTH16_VERSION__` is substituted by tsup (see
+// tsup.config.ts) and by the vitest configs, which read the same manifest — an
+// unpinned URL would serve whatever is newest, which is a different wasm than
+// the one these tests passed against.
+const GROTH16_WASM_CDN = `https://unpkg.com/@orbinum/groth16-proofs@${__GROTH16_VERSION__}/groth16_proofs_bg.wasm`;
 
 let wasmModule: any = null;
 
@@ -39,10 +42,14 @@ export async function initWasm(): Promise<void> {
     const wasm = await import('@orbinum/groth16-proofs');
 
     if (typeof window === 'undefined' && typeof self === 'undefined') {
-      // Node.js: load the WASM binary from disk via dynamic require.
-      const requireFn = eval('require');
-      const fs = requireFn('fs');
-      const path = requireFn('path');
+      // Node.js: load the WASM binary from disk.
+      //
+      // `getNodeRequire()` rather than `eval('require')`: the latter works in
+      // the CommonJS build and throws `ReferenceError: require is not defined`
+      // in the ESM one, from the same source line.
+      const requireFn = await getNodeRequire();
+      const fs = requireFn('fs') as typeof import('fs');
+      const path = requireFn('path') as typeof import('path');
       const wasmDir = path.dirname(requireFn.resolve('@orbinum/groth16-proofs'));
       const wasmBuffer = fs.readFileSync(path.join(wasmDir, 'groth16_proofs_bg.wasm'));
 

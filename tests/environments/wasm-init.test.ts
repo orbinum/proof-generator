@@ -166,3 +166,43 @@ describe('WASM initialisation per environment', () => {
     });
   });
 });
+
+/**
+ * Where `getNodeRequire()` resolves from.
+ *
+ * The two module systems reach `require` differently, and the difference is
+ * easy to get subtly wrong: CommonJS resolves relative to the MODULE, while
+ * `createRequire` resolves relative to whatever path it is handed. Anchoring
+ * the ESM path on `process.cwd()` passes every test run from the project root
+ * and fails the moment a process runs from somewhere else — a CLI invoked from
+ * a user's home directory, a test runner with its own working directory.
+ *
+ * Measured while auditing 7.0.0 against a packed tarball: with the CWD outside
+ * the project, the CommonJS build resolved its wasm fine and a CWD-anchored ESM
+ * build failed with `Cannot find module '@orbinum/groth16-proofs'`. The two
+ * builds must behave the same.
+ */
+describe('getNodeRequire', () => {
+  it('anchors on this module, not the working directory', async () => {
+    const { getNodeRequire } = await import('../../src/internal/nodeRequire');
+    const nodeRequire = await getNodeRequire();
+
+    // Resolving the wasm dependency must not depend on where the process was
+    // started. Under vitest the CWD is the project root, so this passing is
+    // necessary but not sufficient — the assertion below is the load-bearing
+    // one.
+    expect(() => nodeRequire.resolve('@orbinum/groth16-proofs')).not.toThrow();
+  });
+
+  it('reads a module path rather than hardcoding the CWD', async () => {
+    // A source-level assertion, because the runtime one above cannot
+    // distinguish the two anchors while the CWD happens to be correct. If the
+    // CWD ever becomes the only anchor again, this fails and names why.
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync('src/internal/nodeRequire.ts', 'utf8');
+
+    expect(source).toContain('ownModulePath()');
+    // The CWD may remain as a fallback, but never as the sole base.
+    expect(source).toMatch(/ownModulePath\(\)\s*\?\?/);
+  });
+});

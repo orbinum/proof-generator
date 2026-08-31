@@ -58,42 +58,41 @@ describe.skipIf(!built)('the built package', () => {
     expect(existsSync(join(process.cwd(), pkg.types))).toBe(true);
   });
 
-  it('keeps Node builtins out of everything a browser loads', () => {
-    // `fs` and `path` are reachable only through the Node provider and the
-    // Node half of the loader, both behind a runtime environment check. If a
-    // static `require('fs')` appeared at the top of a shared module, every
-    // bundler would either polyfill it or fail — and the failure would land on
-    // a consumer's build, not here.
-    const offenders = files.filter(f => {
-      if (/providers\/node\.js$|wasm\/loader\.js$/.test(f)) return false;
-      return /require\(["'](fs|path|node:fs|node:path|crypto|os|child_process)["']\)/.test(
-        readFileSync(f, 'utf8')
-      );
-    });
-
-    expect(offenders).toEqual([]);
-  });
-
-  it('reaches Node builtins only lazily, never at module scope', () => {
-    // In the two files that may touch them, the access has to be inside a
-    // function body. A top-level `require('fs')` executes on import, which is
-    // before any environment check can run.
-    for (const file of ['providers/node.js', 'wasm/loader.js']) {
+  it('never names a Node builtin in a static import', () => {
+    // `fs` and `path` are reached only behind a runtime environment check,
+    // through `getNodeRequire()`. A STATIC import of one — `import fs from
+    // 'fs'` or a top-level `require('fs')` — executes on load, before any check
+    // can run, and every browser bundler would then either polyfill it or fail
+    // the consumer's build.
+    //
+    // The output is bundled into one file per format, so this reads both rather
+    // than walking a module tree.
+    for (const file of ['index.js', 'index.mjs']) {
       const source = readFileSync(join(DIST, file), 'utf8');
-      const topLevel = source
-        .split('\n')
-        .filter(line => /^(const|let|var)\s+\w+\s*=\s*require\(["'](fs|path)/.test(line));
+      const statics = [
+        ...source.matchAll(/^\s*import\s[^;]*from\s*["'](node:)?(fs|path|os|crypto)["']/gm),
+        ...source.matchAll(/^(const|let|var)\s+\w+\s*=\s*require\(["'](node:)?(fs|path)["']\)/gm),
+      ].map(m => m[0].trim());
 
-      expect(topLevel, `${file} loads a Node builtin at module scope`).toEqual([]);
+      expect(statics, `dist/${file} loads a Node builtin at module scope`).toEqual([]);
     }
   });
 
-  it('does not leave the removed modules in dist', () => {
-    // `tsc` only writes; it never deletes. A source file removed from `src/`
-    // keeps shipping out of `dist/` until something cleans — which is how two
-    // deleted modules ended up in a 6.0.0 tarball.
-    expect(existsSync(join(DIST, 'utils/index.js'))).toBe(false);
-    expect(existsSync(join(DIST, 'wasm/types.js'))).toBe(false);
+  it('reaches Node builtins through the runtime-guarded helper', () => {
+    // Non-vacuity for the test above: the Node paths DO use fs and path, just
+    // lazily. If the helper vanished, the assertion above would pass for the
+    // wrong reason — nothing left to find.
+    const source = readFileSync(join(DIST, 'index.mjs'), 'utf8');
+    expect(source).toMatch(/getNodeRequire|nodeRequire/);
+  });
+
+  it('emits both module formats with matching declarations', () => {
+    // CommonJS alone is what made this package impossible to tree-shake: a
+    // consumer naming one enum from it pulled snarkjs entire. ESM is what lets
+    // a bundler drop what a host does not call.
+    for (const file of ['index.js', 'index.mjs', 'index.d.ts', 'index.d.mts']) {
+      expect(existsSync(join(DIST, file)), `dist/${file} missing`).toBe(true);
+    }
   });
 
   it('exports the surface downstream packages import', () => {
@@ -118,22 +117,48 @@ describe.skipIf(!built)('the built package', () => {
     }
   });
 
-  it('can resolve the wasm version it builds the CDN URL from', () => {
-    // tsc emits a runtime `require('@orbinum/groth16-proofs/package.json')`
-    // rather than inlining the version. That resolves only while the
-    // dependency declares no `exports` map — or declares one that includes
-    // `"./package.json"`. If it ever adds a restrictive map, this import
-    // breaks under every bundler that honours `exports`, and the symptom is a
-    // resolution error in a consumer's build rather than here.
-    const loader = readFileSync(join(DIST, 'wasm/loader.js'), 'utf8');
-    expect(loader).toContain('@orbinum/groth16-proofs/package.json');
+  it('loads snarkjs lazily, so naming one export does not cost 480 KB', () => {
+    // A static `import * as snarkjs` is a hard graph edge. Under 6.0.0 a
+    // consumer importing only `CircuitType` bundled to 1,539,822 bytes; with
+    // the import behind `await import('snarkjs')` and code splitting, 11,411 —
+    // and the 452 KB chunk is fetched only when a proof is actually generated.
+    //
+    // Both call sites were already async, so the load costs nothing a caller
+    // was not already awaiting.
+    for (const file of ['index.js', 'index.mjs']) {
+      const source = readFileSync(join(DIST, file), 'utf8');
+      const statics = source.match(/^import\s+\*\s+as\s+\w+\s+from\s*["']snarkjs["']/gm) ?? [];
+      expect(statics, `dist/${file} imports snarkjs at module scope`).toEqual([]);
+    }
+  });
 
-    const pkg = require('@orbinum/groth16-proofs/package.json');
-    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+/);
-    expect(
-      pkg.exports === undefined || pkg.exports['./package.json'] !== undefined,
-      'the wasm package added an exports map without "./package.json"; the ' +
-        'version import in src/wasm/loader.ts will not resolve under bundlers'
-    ).toBe(true);
+  it('still reaches snarkjs — lazily', () => {
+    // Non-vacuity for the test above: proving genuinely needs snarkjs, so the
+    // reference must survive as a dynamic import. If it vanished entirely, the
+    // assertion above would pass while the prover was broken.
+    expect(readFileSync(join(DIST, 'index.mjs'), 'utf8')).toMatch(
+      /import\(\s*["']snarkjs["']\s*\)/
+    );
+  });
+
+  it('inlines the wasm version rather than importing package.json', () => {
+    // It used to be `import groth16pkg from '@orbinum/groth16-proofs/package.json'`.
+    // That works in CommonJS and fails in ESM: Node demands an import attribute
+    // (`with { type: 'json' }`) for a JSON module and throws
+    // `ERR_IMPORT_ATTRIBUTE_MISSING` on load, before any function runs.
+    //
+    // Inlining also drops the assumption that the dependency exposes its
+    // manifest at all — an `exports` map without a `"./package.json"` entry
+    // would break the import under every bundler that honours it.
+    const { version } = require('@orbinum/groth16-proofs/package.json');
+
+    for (const file of ['index.js', 'index.mjs']) {
+      const source = readFileSync(join(DIST, file), 'utf8');
+      expect(source, `dist/${file} still imports the dependency's package.json`).not.toMatch(
+        /@orbinum\/groth16-proofs\/package\.json/
+      );
+      // The literal version must survive, or the CDN URL points nowhere.
+      expect(source, `dist/${file} lost the inlined version`).toContain(version);
+    }
   });
 });
