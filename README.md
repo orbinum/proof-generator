@@ -4,7 +4,7 @@
 > Witness calculation (TypeScript/snarkjs) + Proof generation (WASM/arkworks)
 
 [![npm version](https://img.shields.io/npm/v/%40orbinum/proof-generator)](https://www.npmjs.com/package/@orbinum/proof-generator)
-[![License](https://img.shields.io/badge/License-Apache%202.0%20%7C%20GPL%203.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org/)
 
 Generate **128-byte Groth16 ZK-SNARK proofs** in ~400ms (small circuits, post-warmup). Same TypeScript code runs identically in Node.js, browsers, Electron, and Tauri.
@@ -95,4 +95,7 @@ The first proof call in a process incurs the WASM initialization overhead (~1.5â
 
 ## License
 
-Dual-licensed under Apache 2.0 or GPL 3.0. See [LICENSE-APACHE2](LICENSE-APACHE2) and [LICENSE-GPL3](LICENSE-GPL3).
+GNU General Public License v3.0 or later ([LICENSE](LICENSE)).
+
+Not dual-licensed: `@orbinum/circuits` and `@orbinum/groth16-proofs` are both
+GPL-3.0, and this package cannot be used without them.

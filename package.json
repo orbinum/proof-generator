@@ -8,7 +8,7 @@
     "dist"
   ],
   "author": "Orbinum",
-  "license": "GPL-3.0-or-later OR Apache-2.0",
+  "license": "GPL-3.0-or-later",
   "repository": {
     "url": "git+https://github.com/orbinum/proof-generator.git"
   },
