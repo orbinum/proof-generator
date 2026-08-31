@@ -87,4 +87,17 @@ describe('validateProofSize', () => {
     const shortProof = '0xabcd'; // 2 bytes
     expect(() => validateProofSize(shortProof)).toThrow('expected 256 hex chars');
   });
+
+  it('accepts an uppercase 0X prefix', () => {
+    expect(() => validateProofSize('0X' + 'AB'.repeat(128))).not.toThrow();
+  });
+
+  it('rejects the right length in the wrong alphabet', () => {
+    // The length check alone passed this: 256 characters, none of them hex.
+    // It reaches the chain as a proof that cannot decode, with an error that
+    // names neither this package nor the circuit.
+    expect(() => validateProofSize('z'.repeat(256))).toThrow('hexadecimal');
+    expect(() => validateProofSize(' '.repeat(256))).toThrow('hexadecimal');
+    expect(() => validateProofSize('0x' + 'g'.repeat(256))).toThrow('hexadecimal');
+  });
 });

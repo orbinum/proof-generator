@@ -10,7 +10,6 @@ export { generateProof, shouldProveSingleThreaded, type GenerateOptions } from '
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export * from './circuits/types';
-export * from './wasm/types';
 export * from './errors';
 
 // ── Circuits ──────────────────────────────────────────────────────────────────
@@ -34,4 +33,4 @@ export {
   hexSignalToBigInt,
   bigIntToHex,
 } from './utils/encoding';
-export { initWasm, compressSnarkjsProofWasm, generateProofFromWitnessWasm } from './wasm';
+export { initWasm, compressSnarkjsProofWasm, generateProofWasm } from './wasm';

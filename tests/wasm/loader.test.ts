@@ -13,7 +13,7 @@ vi.mock('@orbinum/groth16-proofs', () => ({
   default: vi.fn().mockResolvedValue(undefined),
   init_panic_hook: vi.fn(),
   compress_snarkjs_proof_wasm: vi.fn().mockReturnValue('0x' + 'ab'.repeat(128)),
-  generate_proof_from_decimal_wasm: vi.fn().mockReturnValue(
+  generate_proof_wasm: vi.fn().mockReturnValue(
     JSON.stringify({
       proof: '0x' + 'cd'.repeat(128),
       publicSignals: ['0x' + '01'.repeat(32), '0x' + '02'.repeat(32)],
@@ -23,11 +23,7 @@ vi.mock('@orbinum/groth16-proofs', () => ({
 }));
 
 // Import after mock is set up
-import {
-  initWasm,
-  compressSnarkjsProofWasm,
-  generateProofFromWitnessWasm,
-} from '../../src/wasm/loader';
+import { initWasm, compressSnarkjsProofWasm, generateProofWasm } from '../../src/wasm/loader';
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -104,53 +100,55 @@ describe('compressSnarkjsProofWasm', () => {
   });
 });
 
-// ─── generateProofFromWitnessWasm ────────────────────────────────────────────
+// ─── generateProofWasm ───────────────────────────────────────────────────────
 
-describe('generateProofFromWitnessWasm', () => {
-  const witnessJson = JSON.stringify(['1', '12345', '67890', '111']);
-  const provingKeyBytes = new Uint8Array([1, 2, 3, 4]);
+describe('generateProofWasm', () => {
+  const artifactBytes = new Uint8Array([1, 2, 3, 4]);
+  // A witness is n × 32 little-endian bytes; two elements is enough to pin the
+  // shape without building a real one.
+  const witnessBytes = new Uint8Array(64);
 
   it('returns proof and publicSignals from WASM output', async () => {
-    const result = await generateProofFromWitnessWasm(2, witnessJson, provingKeyBytes);
+    const result = await generateProofWasm(artifactBytes, witnessBytes);
 
     expect(result).toHaveProperty('proof');
     expect(result).toHaveProperty('publicSignals');
     expect(result.proof).toMatch(/^0x[0-9a-f]+$/i);
     expect(Array.isArray(result.publicSignals)).toBe(true);
-    expect(result.publicSignals).toHaveLength(2);
   });
 
-  it('calls generate_proof_from_decimal_wasm with correct arguments', async () => {
+  it('passes the artifact and witness through untouched', async () => {
     const wasm = await import('@orbinum/groth16-proofs');
-    vi.mocked(wasm.generate_proof_from_decimal_wasm).mockClear();
+    vi.mocked(wasm.generate_proof_wasm).mockClear();
 
-    await generateProofFromWitnessWasm(2, witnessJson, provingKeyBytes);
+    await generateProofWasm(artifactBytes, witnessBytes);
 
-    expect(wasm.generate_proof_from_decimal_wasm).toHaveBeenCalledTimes(1);
-    const [numSigs, wtns, pkBytes] = (
-      wasm.generate_proof_from_decimal_wasm as ReturnType<typeof vi.fn>
-    ).mock.calls[0];
-    expect(numSigs).toBe(2);
-    expect(wtns).toBe(witnessJson);
-    expect(pkBytes).toBe(provingKeyBytes);
+    expect(wasm.generate_proof_wasm).toHaveBeenCalledTimes(1);
+    const [artifact, witness] = (wasm.generate_proof_wasm as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+
+    // Identity, not equality: a copy here would double the memory cost of every
+    // proof for no reason.
+    expect(artifact).toBe(artifactBytes);
+    expect(witness).toBe(witnessBytes);
   });
 
   it('throws when WASM function throws', async () => {
     const wasm = await import('@orbinum/groth16-proofs');
-    vi.mocked(wasm.generate_proof_from_decimal_wasm).mockImplementationOnce(() => {
+    vi.mocked(wasm.generate_proof_wasm).mockImplementationOnce(() => {
       throw new Error('deserialize error');
     });
 
-    await expect(generateProofFromWitnessWasm(2, witnessJson, provingKeyBytes)).rejects.toThrow(
+    await expect(generateProofWasm(artifactBytes, witnessBytes)).rejects.toThrow(
       'WASM proof generation failed: deserialize error'
     );
   });
 
   it('throws when WASM returns invalid JSON', async () => {
     const wasm = await import('@orbinum/groth16-proofs');
-    vi.mocked(wasm.generate_proof_from_decimal_wasm).mockReturnValueOnce('not-json{{');
+    vi.mocked(wasm.generate_proof_wasm).mockReturnValueOnce('not-json{{');
 
-    await expect(generateProofFromWitnessWasm(2, witnessJson, provingKeyBytes)).rejects.toThrow(
+    await expect(generateProofWasm(artifactBytes, witnessBytes)).rejects.toThrow(
       'Failed to parse WASM proof output'
     );
   });
