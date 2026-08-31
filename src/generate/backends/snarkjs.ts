@@ -1,10 +1,24 @@
-import * as snarkjs from 'snarkjs';
 import { CircuitType, CircuitInputs, CircuitConfig } from '../../circuits/types';
 import { CircuitNotFoundError, ProofGenerationError } from '../../errors';
 import { ArtifactProvider } from '../../providers/interface';
 import { compressSnarkjsProofWasm } from '../../wasm/loader';
 import { validateProofSize } from '../../utils/validation';
 import { formatProofHexForDisplay, formatPublicSignalsArray } from '../../utils/formatting';
+
+/**
+ * snarkjs, loaded on first use rather than at module scope.
+ *
+ * A static `import * as snarkjs` is a hard graph edge: it puts ~480 KB into
+ * every consumer's bundle, including one that only names `CircuitType` and
+ * never proves anything. Measured under 6.0.0: importing that single enum
+ * bundled to 1,539,822 bytes.
+ *
+ * Both call sites are already async, so the load costs nothing a caller was
+ * not already awaiting — and proving takes seconds.
+ */
+async function loadSnarkjs(): Promise<typeof import('snarkjs')> {
+  return import('snarkjs');
+}
 
 /**
  * Generates a Groth16 proof using the snarkjs backend:
@@ -42,6 +56,7 @@ export async function runSnarkjsBackend(
   }
 
   try {
+    const snarkjs = await loadSnarkjs();
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(
       inputs,
       wasmBinary,

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-08-31
+
+### Changed
+
+- **BREAKING — the package now ships ESM as well as CommonJS**, with an `exports` map, `module`, and `sideEffects: false`. As CommonJS-only it could not be tree-shaken by any bundler, so a consumer naming a single export paid for the whole package: importing just `CircuitType` bundled to **1,539,822 bytes**. It is now **11,411**, with snarkjs split into a chunk fetched only when a proof is generated.
+
+  `main` still points at CommonJS. Metro on React Native 0.73 does not enable `exports` resolution by default, so a mobile host reads `main`, and pointing it at ESM would break it.
+
+- **snarkjs is imported lazily.** A static `import * as snarkjs` is a hard graph edge that no `sideEffects: false` can remove. Both call sites were already `async`, so the load costs nothing a caller was not already awaiting — and proving takes seconds.
+
+- **`eval('require')` is replaced by `getNodeRequire()`** (`src/internal/nodeRequire.ts`). It works in CommonJS and throws `ReferenceError: require is not defined` in ESM, from the same source line, so it made an ESM build impossible. The replacement resolves whichever mechanism the runtime has; `createRequire(import.meta.url)` alone would not do, since `import.meta` is a syntax error in the CommonJS output.
+
+  `NodeArtifactProvider` now resolves `fs`/`path` on first use rather than in its constructor, because obtaining `require` under ESM is async. Every artifact read already went to disk, so the one-time cost lands where it was going anyway.
+
+- **The wasm version is inlined at build time** instead of imported from the dependency's `package.json`. That import works in CommonJS and throws `ERR_IMPORT_ATTRIBUTE_MISSING` in ESM — Node demands `with { type: 'json' }` — so the ESM build failed on load, before any function ran. Inlining also drops the assumption that the dependency exposes its manifest at all.
+
+- The build moved from `tsc` to `tsup` to emit both formats and perform the version substitution.
+
+
 ## [6.0.0] - 2026-08-31
 
 ### Added
