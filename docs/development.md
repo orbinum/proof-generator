@@ -40,10 +40,6 @@ proof-generator/
 │   │       ├── snarkjs.ts         runSnarkjsBackend()
 │   │       └── arkworks.ts        runArkworksBackend()
 │   │
-│   ├── value_proof/               Value proof helpers
-│   │   ├── index.ts               generateValueProof()
-│   │   └── types.ts               ValueProofOutput
-│   │
 │   ├── circuits/                  Circuit configuration
 │   │   ├── config.ts              getCircuitConfig()
 │   │   ├── index.ts               Re-exports
@@ -59,24 +55,22 @@ proof-generator/
 │   │   └── index.ts               Re-exports
 │   │
 │   ├── wasm/                      WASM module management
-│   │   ├── index.ts               initWasm, compressSnarkjsProofWasm, generateProofFromWitnessWasm
-│   │   ├── loader.ts              Lazy-load groth16-proofs WASM
-│   │   └── types.ts               WitnessData
+│   │   ├── index.ts               initWasm, compressSnarkjsProofWasm, generateProofWasm
+│   │   └── loader.ts              Lazy-load groth16-proofs WASM
 │   │
 │   └── utils/
 │       ├── encoding.ts            bigIntToBytes32, hexSignalToBigInt, …
 │       ├── formatting.ts          normalizeProofHex, formatPublicSignalsArray, …
-│       ├── validation.ts          validateInputs, validatePublicSignals, validateProofSize
-│       └── index.ts               Re-exports
+│       └── validation.ts          validateInputs, validatePublicSignals, validateProofSize
 │
 ├── tests/                         Mirrors src/ structure
+│   ├── e2e/                       Real proofs — no mocks, run separately
 │   ├── generate/
-│   │   ├── index.test.ts          generateProof() — 15 tests
-│   │   └── provider.test.ts       resolveProvider() — 4 tests
-│   ├── value_proof/
-│   │   └── index.test.ts          generateValueProof() — 9 tests
+│   │   ├── index.test.ts          generateProof()
+│   │   ├── provider.test.ts       resolveProvider()
+│   │   └── backends/wtns.test.ts  .wtns section-table parsing
 │   ├── errors/
-│   │   └── index.test.ts          Error class hierarchy — 11 tests
+│   │   └── index.test.ts          Error class hierarchy
 │   ├── circuits/
 │   │   └── config.test.ts         Circuit config resolution
 │   ├── providers/
@@ -88,7 +82,7 @@ proof-generator/
 │   │   └── validation.test.ts
 │   ├── wasm/
 │   │   └── loader.test.ts
-│   └── generate.test.ts           Integration: real proof generation (all 4 circuits)
+│   └── e2e/proving.test.ts        Real proofs for all three circuits, both backends
 │
 ├── scripts/
 │   ├── benchmark.ts               Full proof benchmark (all circuits × backends)
@@ -121,6 +115,10 @@ Compiles TypeScript to `dist/`:
 - Output: `dist/**/*.js`
 - Target: ES2022, CommonJS modules
 
+It removes `dist/` first. `tsc` only writes, never deletes, so a file dropped
+from `src/` keeps shipping out of `dist/` until something happens to clean —
+which is how two removed modules ended up in a 6.0.0 tarball.
+
 ### Testing
 
 ```bash
@@ -141,8 +139,8 @@ pnpm test tests/generate/index.test.ts
 
 - Framework: **Vitest 4.1.3**
 - TypeScript: native support (no ts-jest)
-- External modules (`snarkjs`, `@orbinum/groth16-proofs`, `circomlibjs`) are mocked in unit tests
-- `tests/generate.test.ts` runs real proof generation (integration)
+- External modules (`snarkjs`, `@orbinum/groth16-proofs`) are mocked in the unit suite
+- `tests/e2e/` runs real proof generation against the published packages, and mocks nothing
 
 ### Code Formatting
 
@@ -227,13 +225,8 @@ provider.getCircuitWasm + getCircuitZkey
 provider.getCircuitWasm + getCircuitProvingKey (.ark)
   → snarkjs.wtns.calculate(inputs, wasm)
   → snarkjs.wtns.exportJson(wtns)
-  → generateProofFromWitnessWasm(witness, provingKey)
+  → generateProofWasm(artifactBytes, witnessBytes)
 ```
-
-### `src/value_proof/index.ts`
-
-Uses `circomlibjs.buildPoseidon` to compute `owner_hash = Poseidon(ownerPubkey)`, then calls
-`generateProof(CircuitType.ValueProof, ...)` and maps raw signals to `ValueProofOutput.decoded`.
 
 ### `src/errors/index.ts`
 
@@ -254,7 +247,7 @@ Manages lifecycle of the `@orbinum/groth16-proofs` WASM module. Lazy-initializes
 ```typescript
 export async function initWasm(): Promise<void>
 export async function compressSnarkjsProofWasm(proof): Promise<string>
-export async function generateProofFromWitnessWasm(witness, provingKey): Promise<{ proof, publicSignals }>
+export async function generateProofWasm(artifactBytes, witnessBytes): Promise<{ proof, publicSignals }>
 ```
 
 ## Architecture Overview
@@ -276,7 +269,7 @@ generateProof()
     └── backend: 'arkworks' ────────────────────────────────────────▮
         getCircuitWasm + getCircuitProvingKey (.ark)             │
         → snarkjs.wtns.calculate → snarkjs.wtns.exportJson       │
-        → generateProofFromWitnessWasm (arkworks WASM)            │
+        → generateProofWasm (arkworks WASM)                       │
                                                                  ↓
                              ProofResult { proof, publicSignals, circuitType }
 ```
@@ -284,8 +277,8 @@ generateProof()
 ### Module Integration
 
 - **snarkjs 0.7.6**: Witness calculation for all circuits; also the full prover in the `snarkjs` backend
-- **@orbinum/groth16-proofs 2.1.0**: Arkworks Groth16 WASM — proof generation in `arkworks` backend, and 128-byte compression for `snarkjs` backend
-- **circomlibjs 0.1.7**: Poseidon hash implementation — used exclusively in `src/value_proof/`
+- **@orbinum/groth16-proofs 4.0.0**: Arkworks Groth16 WASM — proof generation in the `arkworks` backend, and 128-byte compression for the `snarkjs` backend
+- **@orbinum/circuits 0.14.0**: Circuit artifacts — `.wasm`, `.zkey`, and the `.ark` v2 files the arkworks backend proves from
 
 ### Provider System
 
@@ -301,17 +294,21 @@ ArtifactProvider (interface)
 
 **Circuit artifacts are managed via npm packages:**
 
-1. **@orbinum/circuits** (0.4.4)
+1. **@orbinum/circuits** (0.14.0)
 
-   - Circuit WASM files (witness calculators)
-   - Proving keys (`.ark` for arkworks backend)
-   - Verification keys (`.zkey` for snarkjs backend)
-   - Installed automatically as dependency
+   - Circuit `.wasm` files (witness calculators)
+   - Proving keys in both formats: `.zkey` for snarkjs, `.ark` v2 for arkworks
+   - `verification_key_<circuit>.json` — the verifying keys
+   - Installed automatically as a dependency
 
-2. **@orbinum/groth16-proofs** (2.1.0)
+   The `.ark` must be **v2**: it carries the circuit's constraint matrices as
+   well as the proving key, and arkworks cannot prove a Circom circuit without
+   them. A v1 artifact is rejected by name.
+
+2. **@orbinum/groth16-proofs** (4.0.0)
    - Precompiled Arkworks Groth16 WASM
    - Proof generation and 128-byte compression
-   - Installed automatically as dependency
+   - Installed automatically as a dependency
 
 **No manual downloads or postinstall scripts required.**
 
@@ -348,43 +345,98 @@ pnpm install
 
 ## Testing Strategy
 
-**Framework:** Vitest 4.1.3  
-**Total:** 144 tests across 11 suites
+**Framework:** Vitest 4.1.3
+
+Two suites, run by different commands, because they answer different questions
+and cost three orders of magnitude apart.
+
+| Suite | Command | Cost | Mocks |
+| --- | --- | --- | --- |
+| Unit | `pnpm test` | ~300 ms | `snarkjs`, `@orbinum/groth16-proofs` |
+| End-to-end | `pnpm test:e2e` | ~27 s | none |
+
+The split is deliberate, and so is the fact that the unit suite mocks the
+prover. It keeps the common case fast and runnable without 27 MB of proving
+keys — but it means every unit test would pass against a wasm module that
+returned 128 bytes of zeroes. That is not hypothetical: this package shipped
+exactly that for two major versions, and only `tests/e2e/` can catch it.
 
 ### Test Organization
 
 ```
 tests/
+├── e2e/
+│   ├── inputs.ts                 Circuit inputs, copied from the circuits repo
+│   └── proving.test.ts           Real proofs, both backends, verified with snarkjs
+├── environments/
+│   ├── wasm-init.test.ts         Which init entry point runs per environment
+│   └── bundling.test.ts          Static checks on the built package
 ├── generate/
-│   ├── index.test.ts     (15 tests)  generateProof — mocked provider & backends
-│   └── provider.test.ts  ( 4 tests)  resolveProvider — environment detection
-├── value_proof/
-│   └── index.test.ts     ( 9 tests)  generateValueProof — mocked Poseidon
+│   ├── index.test.ts             generateProof — mocked provider & backends
+│   ├── provider.test.ts          resolveProvider — environment detection
+│   └── backends/
+│       └── wtns.test.ts          .wtns section-table parsing, incl. malformed input
 ├── errors/
-│   └── index.test.ts     (11 tests)  Error hierarchy and .code values
+│   └── index.test.ts             Error hierarchy and .code values
 ├── circuits/
-│   └── config.test.ts                Circuit config resolution
+│   ├── circuit-id.test.ts        CIRCUIT_ID drift against the node's constants
+│   └── config.test.ts            Circuit config resolution
 ├── providers/
-│   ├── node.test.ts                  NodeArtifactProvider
-│   └── web.test.ts                   WebArtifactProvider
+│   ├── node.test.ts              NodeArtifactProvider
+│   └── web.test.ts               WebArtifactProvider
 ├── utils/
 │   ├── encoding.test.ts
 │   ├── formatting.test.ts
 │   └── validation.test.ts
-├── wasm/
-│   └── loader.test.ts
-└── generate.test.ts              Integration: real proof generation (all 4 circuits)
+└── wasm/
+    └── loader.test.ts
 ```
+
+`vitest.e2e.config.ts` exists rather than a `--exclude` flag because vitest
+applies `exclude` before any path filter, so a filter-based split silently
+matches nothing.
+
+### Browser and server
+
+Everything else imports from `src/` under Node — the one environment where
+nothing can go wrong. The failures that matter live at the boundary:
+
+- **`wasm-init.test.ts`** — `initWasm` branches on `window`/`self` and calls a
+  different wasm-bindgen entry point on each side, with a differently-named
+  argument key (`{ module }` vs `{ module_or_path }`). Passing the wrong one is
+  not an error: wasm-bindgen reads `undefined` and falls back to fetching the
+  binary relative to its own URL, so the symptom is a request for a file nobody
+  asked for. These assert the exact shape, plus that a Web Worker (`self`
+  without `window`) takes the browser path.
+- **`bundling.test.ts`** — static checks on `dist/`: no Node builtin reachable
+  from a module a browser loads, `fs`/`path` required lazily rather than at
+  module scope, every export downstream packages import still present, and no
+  leftovers from deleted sources. Skips without `dist/`; fails instead under
+  `PROOF_GENERATOR_REQUIRE_ARTIFACTS`.
+
+Both were written against a real `vite` bundle of the package running in a
+browser-shaped context — that is what surfaced the argument-key bug. The bundle
+itself is not in the suite: it takes ~10 s and the bundler's Node API, while the
+properties it demonstrated are checkable directly.
+
+`PROOF_GENERATOR_REQUIRE_ARTIFACTS=1` turns the e2e suite's skip into a failure.
+CI sets it: a suite that skips everything looks exactly like one that passes
+everything.
 
 ### Mocking Approach
 
 External dependencies are mocked with `vi.mock`:
 
-- `snarkjs` — `groth16.fullProve`, `wtns.calculate`, `wtns.exportJson`
-- `@orbinum/groth16-proofs` — `generate_proof_from_witness`, `compress_snarkjs_proof`
-- `circomlibjs` — `buildPoseidon` returns `Object.assign(vi.fn(), { F: { toObject: vi.fn() } })`
+- `snarkjs` — `groth16.fullProve`, `wtns.calculate`
+- `@orbinum/groth16-proofs` — `generate_proof_wasm`, `compress_snarkjs_proof_wasm`
 
 Providers return `Uint8Array` stubs in unit tests — no real artifacts required.
+
+One mock is not a stub: the arkworks backend parses the `.wtns` section table
+itself, so `wtns.calculate` has to produce a structurally real buffer. A mock
+returning an arbitrary blob would exercise the error path while appearing to
+test the happy one. `tests/generate/backends/wtns.test.ts` builds those buffers
+deliberately — including malformed ones — and asserts each is rejected.
 
 ### Unit Test Example
 
@@ -398,23 +450,32 @@ describe('generateProof', () => {
 });
 ```
 
-### Integration Test Example
+### End-to-End Test Example
 
 ```typescript
-describe('Integration: real proofs', () => {
-  it('should generate valid unshield proof', async () => {
-    const result = await generateProof(CircuitType.Unshield, inputs);
-    expect(result.proof).toMatch(/^0x[0-9a-f]{256}$/);
-    expect(result.publicSignals).toHaveLength(5);
-  });
+it('the proof verifies against the registered verifying key', async () => {
+  const provider = new NodeArtifactProvider();
+  const zkey = await provider.getCircuitZkey(name);
+
+  const { proof, publicSignals } = await snarkjs.groth16.fullProve(inputs, wasm, zkey);
+  const vk = await snarkjs.zKey.exportVerificationKey(zkey);
+
+  expect(await snarkjs.groth16.verify(vk, publicSignals, proof)).toBe(true);
+
+  // A tampered signal must break it — otherwise the check above also passes
+  // for a verifier that ignores its inputs.
+  const tampered = [...publicSignals];
+  tampered[0] = (BigInt(tampered[0]) + 1n).toString();
+  expect(await snarkjs.groth16.verify(vk, tampered, proof)).toBe(false);
 });
 ```
 
 ### Run Tests
 
 ```bash
-pnpm test                                # All 144 tests
-pnpm test tests/generate/               # Only generate suite
+pnpm test                               # Unit suite (mocked, ~300 ms)
+pnpm test:e2e                           # Real proofs (~27 s, needs artifacts)
+pnpm test tests/generate/               # Only the generate suite
 pnpm test tests/generate/index.test.ts  # Single file
 pnpm test:coverage                      # With coverage report
 ```
@@ -425,8 +486,8 @@ pnpm test:coverage                      # With coverage report
 
 | Package | Version | Purpose |
 | --- | --- | --- |
-| `@orbinum/circuits` | `0.4.4` | Circuit WASM + proving keys |
-| `@orbinum/groth16-proofs` | `2.1.0` | Arkworks WASM proof generation |
+| `@orbinum/circuits` | `0.14.0` | Circuit `.wasm`, `.zkey`, and `.ark` v2 artifacts |
+| `@orbinum/groth16-proofs` | `4.0.0` | Arkworks WASM proof generation and 128-byte compression |
 | `snarkjs` | `0.7.6` | Witness calculation + snarkjs proving |
 
 ### Development
@@ -437,10 +498,8 @@ pnpm test:coverage                      # With coverage report
 | `@vitest/coverage-v8` | `4.1.3` | Coverage reports |
 | `typescript` | `6.0.2` | Compiler |
 | `prettier` | `3.8.1` | Code formatting |
-| `circomlibjs` | `0.1.7` | Poseidon hash (value_proof module) |
 | `@types/node` | `25.5.2` | Node.js type definitions |
 | `@types/snarkjs` | `0.7.9` | snarkjs type definitions |
-| `@types/circomlibjs` | `0.1.6` | circomlibjs type definitions |
 
 **See:** `package.json` for the complete list.
 
@@ -482,7 +541,7 @@ Automatically publishes to npm.
 2. Add its config entry in `src/circuits/config.ts` (`getCircuitConfig` switch)
 3. Ensure `@orbinum/circuits` package includes the new artifact files
 4. Add unit tests in `tests/circuits/config.test.ts`
-5. Add integration test in `tests/generate.test.ts`
+5. Add the circuit to `tests/e2e/proving.test.ts` and its inputs to `tests/e2e/inputs.ts`
 6. Update `docs/api.md` (Supported Circuits table)
 
 ### Update dependencies
@@ -501,13 +560,11 @@ git push --tags
 # GitHub Actions automatically publishes to npm
 ```
 
-### Run benchmarks
+### Measure proving cost
 
-```bash
-npx tsx scripts/benchmark.ts
-```
-
-Runs all 4 circuits × 2 backends and prints timing per phase.
+There is no benchmark script; `pnpm test:e2e` proves all three circuits with
+both backends and vitest reports each duration, which is the same measurement
+without a second thing to keep in sync.
 
 ### Debug a failing test
 

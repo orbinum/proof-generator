@@ -40,9 +40,8 @@ inputs → snarkjs.groth16.fullProve(inputs, wasm, zkey)
 
 ```
 inputs → snarkjs.wtns.calculate(inputs, wasm, buffer)
-       → snarkjs.wtns.exportJson(buffer) → bigint[]
-       → JSON.stringify(witness.map(v => v.toString()))
-       → generateProofFromWitnessWasm(numSignals, witnessJson, arkBytes)
+       → witnessBytesFromWtns(buffer)  →  n × 32 little-endian bytes
+       → generateProofWasm(artifactBytes, witnessBytes)
        → 128-byte compressed Groth16 proof
 ```
 
@@ -118,3 +117,12 @@ snarkjs `fullProve` is highly optimised for BN254 in JavaScript and has had year
 | Artifact storage is constrained | `arkworks` |
 
 In practice, default to `snarkjs`. Switch to `arkworks` only when artifact size or environment constraints make it the better trade-off.
+
+The witness crosses the boundary as the raw little-endian bytes a `.wtns` file
+already holds, not as decimal-string JSON. For unshield that is 16,928 field
+elements: half a megabyte of binary rather than hundreds of kilobytes of text
+parsed back one BigUint at a time.
+
+The public-signal count is no longer passed in. It is read from the `.ark`
+artifact, because it is a property of the circuit — a caller that got it wrong
+produced a proof that failed verification with nothing to explain why.

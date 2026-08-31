@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-08-31
+
+### Added
+
+- **An end-to-end suite that mocks nothing** (`tests/e2e/`, `pnpm test:e2e`). It resolves the published `@orbinum/circuits` and `@orbinum/groth16-proofs`, proves all three circuits with both backends, and verifies the result with snarkjs — including that a tampered public signal is rejected, and that two proofs over identical inputs differ, since reused Groth16 randomness leaks the witness.
+
+  Until now every test mocked the prover, so the whole suite would have passed against a wasm module returning 128 bytes of zeroes. That is what shipped for two major versions. `PROOF_GENERATOR_REQUIRE_ARTIFACTS=1` turns the suite's artifact-absent skip into a failure, because a suite that skips everything looks exactly like one that passes everything.
+
+- **The arity in `getCircuitConfig` is now checked against the published verifying key.** It was a hand-written table that nothing cross-checked; `IC.length - 1` is the same number the on-chain verifier derives.
+
+- **Environment tests for the browser and server paths** (`tests/environments/`). `initWasm` branches on `window`/`self` and calls a different wasm-bindgen entry point on each side; nothing asserted which one ran, or with what. These pin the entry point, the argument shape, the CDN URL's version pin, and that the Web Worker case (self without window) takes the browser path.
+
+  Alongside them, static checks on the built package: that no Node builtin is reachable from a module a browser loads, that `fs`/`path` are required lazily rather than at module scope, that the exports downstream packages import are all present, and that `dist/` carries no leftovers from deleted sources.
+
+- **Direct tests for the `.wtns` section-table parser** (`tests/generate/backends/wtns.test.ts`), including a data section that is not first, lengths that run past the end, a section count that overruns the table, and a witness that is a view into a larger buffer. Each was verified by reintroducing the corresponding bug and watching exactly one test fail.
+
+### Fixed
+
+- **`validateProofSize` now checks the alphabet, not only the length.** A 256-character string of non-hex passed, and reached the chain as a proof that cannot decode — with an error naming neither this package nor the circuit. An uppercase `0X` prefix is also accepted now; it was previously counted as two proof characters.
+- **The Node WASM fallback passed the wrong argument key.** `wasm.default({ module })` — the async entry point destructures `module_or_path`, so it read `undefined` and silently fell back to fetching `groth16_proofs_bg.wasm` relative to its own module URL, a path that does not exist in a bundle. The failure surfaced as a fetch for a file nobody asked for. Reached only when `initSync` is absent, which no current wasm-pack output does; the trap was live regardless.
+- **An empty `.wtns` data section is rejected.** A witness always opens with the constant 1, so it is never empty; the prover otherwise reported a width mismatch that said nothing about the witness being truncated.
+
+### Removed
+
+- **`circomlibjs` and `@types/circomlibjs`.** The last import went with the `value_proof` helper module in 5.0.0; the dependency stayed behind, shipping a Poseidon implementation to every consumer that no code path reached.
+- **`WitnessData`** (`src/wasm/types.ts`) — the type described the decimal-string witness format this package stopped using, and nothing imported it here or downstream.
+- **`src/utils/index.ts`** — a second export list that duplicated `src/index.ts` and could drift from it. Nothing imported it.
+
+### Changed
+
+- **The license is now GPL-3.0-or-later only, no longer dual-licensed with Apache-2.0.** `@orbinum/circuits` and `@orbinum/groth16-proofs` are both GPL-3.0 and this package cannot function without them, so the Apache-2.0 option it advertised was not one a user could actually exercise.
+- The comment above the wasm version import claimed it was "resolved at build time". It is not: `tsc` emits a runtime `require('@orbinum/groth16-proofs/package.json')`, which resolves only because that package declares no `exports` map. The comment now says so, and a test pins the assumption.
+- `docs/development.md` described a `src/value_proof/` module removed in 5.0.0, a `tests/generate.test.ts` that does not exist, a benchmark script that does not exist, and dependency versions two majors stale.
+
+- **The arkworks backend now produces proofs that verify.** It never did. `@orbinum/groth16-proofs` proved with arkworks' default QAP reduction where Circom requires `CircomReduction` — the two compute the H polynomial differently, and a proof built with the wrong one is well-formed, deserializes cleanly, is exactly 128 bytes, and always fails verification.
+
+  It went unnoticed because `@orbinum/circuits` shipped no `ark` entries in its manifest, so `WebArtifactProvider.getCircuitProvingKey()` threw before the prover was ever reached. One bug hid another. The default `snarkjs` backend was never affected.
+
+- **BREAKING — `generateProof(…, { backend: 'arkworks' })` requires `@orbinum/circuits` 0.14.0 or later.** Proving needs the circuit's constraint matrices as well as its proving key, and a `.ark` v1 carries only the key. The v2 artifact carries both; earlier artifacts are rejected by name.
+- **BREAKING — `generateProofFromWitnessWasm` is removed; use `generateProofWasm`,** which takes a `.ark` v2 artifact and the witness as raw bytes. The old signature had nowhere to put the constraint matrices, and the function it called no longer exists in `@orbinum/groth16-proofs` 4.0.0 — its only possible use was generating proofs that never verified. The public-signal count is now read from the artifact rather than passed in: it is a property of the circuit, and a caller that gets it wrong produces a proof that fails verification with nothing to explain why.
+- The arkworks backend reads the witness straight out of snarkjs's in-memory `.wtns` instead of going through `wtns.exportJson`. That path turned ~17,000 field elements into decimal strings, JSON-stringified them, and had WASM parse them back one big integer at a time — hundreds of kilobytes of text for values the `.wtns` already stores as the 32-byte little-endian words arkworks wants.
+- Bumped `@orbinum/circuits` to 0.14.0 and `@orbinum/groth16-proofs` to 4.0.0.
+
+
 ## [5.1.0] - 2026-08-07
 
 ### Added
