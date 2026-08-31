@@ -10,7 +10,6 @@ export { generateProof, shouldProveSingleThreaded, type GenerateOptions } from '
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export * from './circuits/types';
-export * from './wasm/types';
 export * from './errors';
 
 // ── Circuits ──────────────────────────────────────────────────────────────────
