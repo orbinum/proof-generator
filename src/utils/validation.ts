@@ -19,11 +19,28 @@ export function validatePublicSignals(signals: string[], expected: number): void
   }
 }
 
+/** A compressed BN254 Groth16 proof is 128 bytes — 256 hex characters. */
+const PROOF_HEX_CHARS = 256;
+
+/**
+ * Check that a proof is a 128-byte hex string.
+ *
+ * Both the length and the alphabet matter. This runs on the string a wasm
+ * boundary handed back, and the only thing downstream of it is an extrinsic:
+ * a value that is the right length but not hex reaches the chain as a proof
+ * that cannot decode, where the error names neither this package nor the
+ * circuit. Checking here costs one regex and names the actual problem.
+ */
 export function validateProofSize(proofHex: string): void {
-  const cleanHex = proofHex.startsWith('0x') ? proofHex.slice(2) : proofHex;
-  if (cleanHex.length !== 256) {
+  const cleanHex = /^0x/i.test(proofHex) ? proofHex.slice(2) : proofHex;
+
+  if (cleanHex.length !== PROOF_HEX_CHARS) {
     throw new Error(
-      `Invalid proof size: expected 256 hex chars (128 bytes), got ${cleanHex.length} chars`
+      `Invalid proof size: expected ${PROOF_HEX_CHARS} hex chars (128 bytes), ` +
+        `got ${cleanHex.length} chars`
     );
+  }
+  if (!/^[0-9a-f]+$/i.test(cleanHex)) {
+    throw new Error('Invalid proof: expected hexadecimal characters only');
   }
 }
