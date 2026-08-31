@@ -1,1 +1,1 @@
-export { initWasm, compressSnarkjsProofWasm, generateProofFromWitnessWasm } from './loader';
+export { initWasm, compressSnarkjsProofWasm, generateProofWasm } from './loader';

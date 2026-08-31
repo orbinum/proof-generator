@@ -34,4 +34,4 @@ export {
   hexSignalToBigInt,
   bigIntToHex,
 } from './utils/encoding';
-export { initWasm, compressSnarkjsProofWasm, generateProofFromWitnessWasm } from './wasm';
+export { initWasm, compressSnarkjsProofWasm, generateProofWasm } from './wasm';

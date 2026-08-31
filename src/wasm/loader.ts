@@ -7,8 +7,15 @@
  * accepted by `pallet-zk-verifier` on-chain.
  */
 
-// Read the installed version at build time so the CDN URL stays in sync.
-// resolveJsonModule must be enabled in tsconfig (it is).
+// The CDN URL carries the exact version of the wasm this package was built
+// against, read from the dependency's own manifest so the two cannot drift.
+//
+// Note this is a runtime require in the CommonJS output, not an inlined
+// constant — `resolveJsonModule` type-checks the import but tsc still emits
+// `require('@orbinum/groth16-proofs/package.json')`. It resolves because the
+// dependency declares no `exports` map; were it to add one without a
+// `"./package.json"` entry, this import would stop resolving under bundlers
+// that honour it. `tests/environments/bundling.test.ts` pins that assumption.
 import groth16pkg from '@orbinum/groth16-proofs/package.json';
 
 interface SnarkjsProofLike {
@@ -39,10 +46,16 @@ export async function initWasm(): Promise<void> {
       const wasmDir = path.dirname(requireFn.resolve('@orbinum/groth16-proofs'));
       const wasmBuffer = fs.readFileSync(path.join(wasmDir, 'groth16_proofs_bg.wasm'));
 
+      // The two entry points take differently-named keys: `initSync` destructures
+      // `{ module }`, the async default `{ module_or_path }`. Passing the wrong
+      // one is not an error — wasm-bindgen reads `undefined` and silently falls
+      // back to fetching `groth16_proofs_bg.wasm` relative to its own URL, which
+      // in a bundle does not exist. The failure then surfaces as a fetch error
+      // naming a file nobody asked for.
       if (typeof wasm.initSync === 'function') {
         wasm.initSync({ module: wasmBuffer });
       } else if (typeof wasm.default === 'function') {
-        await wasm.default({ module: wasmBuffer });
+        await wasm.default({ module_or_path: wasmBuffer });
       }
     } else {
       // Browser: pass the WASM CDN URL directly to the init function.
@@ -110,30 +123,37 @@ export async function compressSnarkjsProofWasm(proof: SnarkjsProofLike): Promise
 }
 
 /**
- * Generate a Groth16 proof entirely within arkworks using a pre-computed
- * witness (decimal string array) and an `.ark` compressed proving key.
+ * Generate a Groth16 proof from a `.ark` v2 artifact and a raw witness.
  *
- * @param numPublicSignals - Number of public signals to extract from the witness.
- * @param witnessDecimalJson - JSON array of witness values as decimal strings,
- *   e.g. `["1","12345","67890"]` (snarkjs native format).
- * @param provingKeyBytes - Serialized arkworks compressed proving key (.ark file).
- * @returns Object with `proof` (0x-prefixed 128-byte hex) and `publicSignals`
- *   (array of 0x-prefixed 32-byte little-endian hex strings).
+ * Replaces the 5.x entry point, which produced proofs that never verified.
+ * Two things changed and both had to:
+ *
+ * - **The artifact carries its constraint matrices.** Proving a Circom circuit
+ *   needs them as well as the proving key, and a `.ark` v1 has only the key, so
+ *   no signature taking one could have been fixed in place.
+ * - **The witness arrives as bytes.** The old path serialised ~17,000 field
+ *   elements to decimal-string JSON — hundreds of kilobytes of text, parsed back
+ *   one big integer at a time. These are the `n × 32` little-endian bytes that a
+ *   `.wtns` file already holds.
+ *
+ * The public-signal count is read from the artifact rather than passed in: it is
+ * a property of the circuit, and a caller that gets it wrong produces a proof
+ * that fails verification with nothing to explain why.
+ *
+ * @param artifactBytes - A `.ark` v2 file: proving key plus constraint matrices.
+ * @param witnessBytes - The witness as `n × 32` little-endian bytes.
+ * @returns `proof` (0x-prefixed 128-byte hex) and `publicSignals` (0x-prefixed
+ *   32-byte little-endian hex).
  */
-export async function generateProofFromWitnessWasm(
-  numPublicSignals: number,
-  witnessDecimalJson: string,
-  provingKeyBytes: Uint8Array
+export async function generateProofWasm(
+  artifactBytes: Uint8Array,
+  witnessBytes: Uint8Array
 ): Promise<{ proof: string; publicSignals: string[] }> {
   if (!wasmModule) await initWasm();
 
   let raw: string;
   try {
-    raw = wasmModule.generate_proof_from_decimal_wasm(
-      numPublicSignals,
-      witnessDecimalJson,
-      provingKeyBytes
-    );
+    raw = wasmModule.generate_proof_wasm(artifactBytes, witnessBytes);
   } catch (error) {
     throw new Error(`WASM proof generation failed: ${(error as Error).message}`);
   }

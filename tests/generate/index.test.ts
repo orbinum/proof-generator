@@ -17,7 +17,7 @@ vi.mock('@orbinum/groth16-proofs', () => ({
   default: vi.fn().mockResolvedValue(undefined),
   init_panic_hook: vi.fn(),
   compress_snarkjs_proof_wasm: vi.fn().mockReturnValue('0x' + 'ab'.repeat(128)),
-  generate_proof_from_decimal_wasm: vi.fn().mockReturnValue(
+  generate_proof_wasm: vi.fn().mockReturnValue(
     JSON.stringify({
       proof: '0x' + 'cd'.repeat(128),
       publicSignals: [
@@ -52,10 +52,61 @@ vi.mock('snarkjs', () => ({
     }),
   },
   wtns: {
-    calculate: vi.fn().mockResolvedValue(undefined),
+    // The arkworks backend reads the raw `.wtns` bytes rather than calling
+    // exportJson, so the mock has to produce a real one — see buildWtns below.
+    calculate: vi.fn().mockImplementation(async (_inputs, _wasm, buffer) => {
+      buffer.data = buildWtns([1n, 10n, 20n, 30n, 40n, 50n, 60n, 70n]);
+    }),
     exportJson: vi.fn().mockResolvedValue([1n, 10n, 20n, 30n, 40n, 50n, 60n, 70n]),
   },
 }));
+
+/**
+ * A minimal but structurally real `.wtns` buffer.
+ *
+ * The backend parses the section table for the data section, so a mock that
+ * returned an arbitrary blob would test the error path instead of the happy one.
+ * Layout: "wtns" magic, u32 version, u32 section count, then (u32 type, u64
+ * length) per section — 1 is the header, 2 is the data.
+ */
+function buildWtns(values: bigint[]): Uint8Array {
+  const FIELD_BYTES = 32;
+  const headerSection = 4 + FIELD_BYTES + 4; // field size, prime, witness count
+  const dataSection = values.length * FIELD_BYTES;
+  const total = 12 + 12 + headerSection + 12 + dataSection;
+
+  const bytes = new Uint8Array(total);
+  const view = new DataView(bytes.buffer);
+  let off = 0;
+
+  bytes.set([0x77, 0x74, 0x6e, 0x73], off); // "wtns"
+  off += 4;
+  view.setUint32(off, 2, true); // version
+  off += 4;
+  view.setUint32(off, 2, true); // two sections
+  off += 4;
+
+  view.setUint32(off, 1, true); // section 1: header
+  view.setBigUint64(off + 4, BigInt(headerSection), true);
+  off += 12;
+  view.setUint32(off, FIELD_BYTES, true);
+  off += 4 + FIELD_BYTES; // field size, then the prime (zeroes are fine here)
+  view.setUint32(off, values.length, true);
+  off += 4;
+
+  view.setUint32(off, 2, true); // section 2: data
+  view.setBigUint64(off + 4, BigInt(dataSection), true);
+  off += 12;
+  for (const v of values) {
+    let rest = v;
+    for (let i = 0; i < FIELD_BYTES; i++) {
+      bytes[off + i] = Number(rest & 0xffn);
+      rest >>= 8n;
+    }
+    off += FIELD_BYTES;
+  }
+  return bytes;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -174,18 +225,24 @@ describe('generateProof — arkworks backend', () => {
     expect(provider.getCircuitZkey).not.toHaveBeenCalled();
   });
 
-  it('passes witness decimal JSON and .ark bytes to WASM', async () => {
+  it('passes the .ark artifact and a raw little-endian witness to WASM', async () => {
     const wasm = await import('@orbinum/groth16-proofs');
     await generateProof(CircuitType.Unshield, VALID_INPUTS, { provider, backend: 'arkworks' });
-    expect(wasm.generate_proof_from_decimal_wasm).toHaveBeenCalledTimes(1);
-    const [numSigs, witnessJson, pkBytes] = (
-      wasm.generate_proof_from_decimal_wasm as ReturnType<typeof vi.fn>
-    ).mock.calls[0];
-    expect(numSigs).toBe(7);
-    const parsed = JSON.parse(witnessJson);
-    expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed[0]).toBe('1');
-    expect(pkBytes).toBe(FAKE_ARK);
+    expect(wasm.generate_proof_wasm).toHaveBeenCalledTimes(1);
+
+    const [artifactBytes, witnessBytes] = (wasm.generate_proof_wasm as ReturnType<typeof vi.fn>)
+      .mock.calls[0];
+    expect(artifactBytes).toBe(FAKE_ARK);
+
+    // Bytes, not decimal strings: the old ABI stringified ~17,000 field
+    // elements into JSON on every proof.
+    expect(witnessBytes).toBeInstanceOf(Uint8Array);
+    expect(witnessBytes.length % 32).toBe(0);
+    expect(witnessBytes.length / 32).toBe(8);
+
+    // The witness opens with the constant 1, little-endian.
+    expect(witnessBytes[0]).toBe(1);
+    expect(witnessBytes.subarray(1, 32).every((b: number) => b === 0)).toBe(true);
   });
 
   it('throws CircuitNotFoundError when provider rejects on proving key fetch', async () => {
@@ -217,7 +274,7 @@ describe('generateProof — arkworks backend', () => {
 
   it('throws ProofGenerationError when WASM proof generation throws', async () => {
     const wasm = await import('@orbinum/groth16-proofs');
-    vi.mocked(wasm.generate_proof_from_decimal_wasm).mockImplementationOnce(() => {
+    vi.mocked(wasm.generate_proof_wasm).mockImplementationOnce(() => {
       throw new Error('bad proving key');
     });
     await expect(
