@@ -51,7 +51,7 @@
   ],
   "dependencies": {
     "@orbinum/circuits": "0.14.0",
-    "@orbinum/groth16-proofs": "4.0.0",
+    "@orbinum/groth16-proofs": "4.1.0",
     "snarkjs": "0.7.6"
   },
   "devDependencies": {

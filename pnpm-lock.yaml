@@ -12,8 +12,8 @@ importers:
         specifier: 0.14.0
         version: 0.14.0
       '@orbinum/groth16-proofs':
-        specifier: 4.0.0
-        version: 4.0.0
+        specifier: 4.1.0
+        version: 4.1.0
       snarkjs:
         specifier: 0.7.6
         version: 0.7.6
@@ -268,8 +268,8 @@ packages:
     resolution: {integrity: sha512-RTYp3g0SZoe0Mm5nKpfNjbIuOIU/vCZmem82mr4d8erEah0xbmijr6oFXCN3W2QOA8miTSS3E6c7N59Wxdwwrg==}
     engines: {node: '>=18.0.0'}
 
-  '@orbinum/groth16-proofs@4.0.0':
-    resolution: {integrity: sha512-h351ZkTyrIckbTwZ2xYeFU7hP0zto50RE3hkRpfxrSMC5esdusbr+msFLN2BGGVvuPVBUQJFJ2Fm6mEoiYczKA==}
+  '@orbinum/groth16-proofs@4.1.0':
+    resolution: {integrity: sha512-wg2UWOoXh0Ekn6E189YTEXVTf/gIo4oH+xUAq3u7dbGIfzgCLtzA/yFKUl5Y3jCjxh9zCC0zKXCKuP03tj6SMw==}
     engines: {node: '>=18.0.0'}
 
   '@oxc-project/types@0.130.0':
@@ -1308,7 +1308,7 @@ snapshots:
 
   '@orbinum/circuits@0.14.0': {}
 
-  '@orbinum/groth16-proofs@4.0.0': {}
+  '@orbinum/groth16-proofs@4.1.0': {}
 
   '@oxc-project/types@0.130.0': {}
 

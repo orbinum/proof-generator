@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `@orbinum/groth16-proofs` pinned to **4.1.0**. That release adds a C surface
+  behind an `ffi` feature for the mobile provers; the npm package is built with
+  `wasm-pack --features wasm`, so none of it reaches this bundle and the WASM
+  here is the same code 4.0.0 shipped. Raised anyway to keep the three repos on
+  one version rather than leaving a gap somebody has to explain later.
+
 ## [7.0.0] - 2026-08-31
 
 ### Changed
