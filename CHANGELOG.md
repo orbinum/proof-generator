@@ -7,13 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.1.0] - 2026-09-09
+
+### Added
+
+- **`setWasmUrl(url)` and `initWasm({ wasmUrl })`** — say where the browser
+  loads `groth16_proofs_bg.wasm` from, instead of always the pinned CDN.
+
+  The CDN default is right for a web app and wrong for a browser extension.
+  MV3's content security policy is `script-src 'self'`, so the fetch is refused
+  — and a wallet pulling its prover from a third party at spend time is exactly
+  what that policy exists to prevent. An extension bundles the `.wasm` itself
+  and names the packaged URL here.
+
+  Two entry points because there are two moments: `initWasm({ wasmUrl })` for a
+  host that initializes explicitly, `setWasmUrl` for one that does not. The
+  second is the important one — `compressSnarkjsProofWasm` and
+  `generateProofWasm` both initialize lazily and take no options, so a host
+  that never calls `initWasm` (the ordinary case, since proving works without
+  it) would otherwise get the CDN back no matter what it configured.
+
+  Nothing changes for a caller that sets neither.
+
 ### Changed
+
+- **`src/wasm/` split by concern.** `loader.ts` had grown to hold the URL
+  decision, the module init, and both call surfaces. It is now `source.ts`
+  (where the WASM comes from), `init.ts`, `prove.ts`, `compress.ts` and
+  `types.ts`, with `loader.ts` kept as a barrel so existing imports still
+  resolve. No behaviour change.
 
 - `@orbinum/groth16-proofs` pinned to **4.1.0**. That release adds a C surface
   behind an `ffi` feature for the mobile provers; the npm package is built with
   `wasm-pack --features wasm`, so none of it reaches this bundle and the WASM
   here is the same code 4.0.0 shipped. Raised anyway to keep the three repos on
   one version rather than leaving a gap somebody has to explain later.
+
+- **`src/wasm/loader.ts` split by responsibility** — 221 lines holding four
+  unrelated jobs became five files:
+
+  | File               | Responsibility                             |
+  | ------------------ | ------------------------------------------ |
+  | `wasm/types.ts`    | `SnarkjsProofLike`, `InitWasmOptions`      |
+  | `wasm/source.ts`   | where the browser fetches the `.wasm` from |
+  | `wasm/init.ts`     | instantiation, per environment             |
+  | `wasm/compress.ts` | `compressSnarkjsProofWasm`                 |
+  | `wasm/prove.ts`    | `generateProofWasm`                        |
+
+  `loader.ts` stays as a re-export barrel: the tests and both backends import
+  that path directly, and deleting it means touching four files to gain
+  nothing.
+
+  Three things changed beyond moving lines. The browser branch's inline
+  `initFn` ternary became a named `resolveInitFn`, so the comment explaining
+  Vite's CJS→ESM interop sits on the function it describes. The
+  `if (!wasmModule) await initWasm()` that opened both proving functions became
+  `getWasm()` — which also stops `wasmModule` being shared mutable state across
+  files, since only `init.ts` touches it now. And `initWasm` sets the
+  configured URL through `setWasmUrl` rather than assigning the variable, which
+  lives in another module.
+
+  No public API change: the same five names are exported from
+  `@orbinum/proof-generator`, and the 186 existing tests pass untouched. The
+  ESM bundle grows 569 bytes (23,622 → 24,191), which is the extracted
+  helpers no longer being inlined into one function body.
 
 ## [7.0.0] - 2026-08-31
 
@@ -32,7 +89,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The wasm version is inlined at build time** instead of imported from the dependency's `package.json`. That import works in CommonJS and throws `ERR_IMPORT_ATTRIBUTE_MISSING` in ESM — Node demands `with { type: 'json' }` — so the ESM build failed on load, before any function ran. Inlining also drops the assumption that the dependency exposes its manifest at all.
 
 - The build moved from `tsc` to `tsup` to emit both formats and perform the version substitution.
-
 
 ## [6.0.0] - 2026-08-31
 
@@ -76,7 +132,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING — `generateProofFromWitnessWasm` is removed; use `generateProofWasm`,** which takes a `.ark` v2 artifact and the witness as raw bytes. The old signature had nowhere to put the constraint matrices, and the function it called no longer exists in `@orbinum/groth16-proofs` 4.0.0 — its only possible use was generating proofs that never verified. The public-signal count is now read from the artifact rather than passed in: it is a property of the circuit, and a caller that gets it wrong produces a proof that fails verification with nothing to explain why.
 - The arkworks backend reads the witness straight out of snarkjs's in-memory `.wtns` instead of going through `wtns.exportJson`. That path turned ~17,000 field elements into decimal strings, JSON-stringified them, and had WASM parse them back one big integer at a time — hundreds of kilobytes of text for values the `.wtns` already stores as the 32-byte little-endian words arkworks wants.
 - Bumped `@orbinum/circuits` to 0.14.0 and `@orbinum/groth16-proofs` to 4.0.0.
-
 
 ## [5.1.0] - 2026-08-07
 
@@ -247,8 +302,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`jest.config.js`**, **`lint-staged.config.js`**, **`package-lock.json`**, **`.husky/pre-commit`** — replaced by Vitest + pnpm.
 - **`CircuitConfig.provingKeyPath`** — `.ark` path no longer exposed in the public interface.
 - Tests under `tests/unit/` and `tests/integration/` — reorganised into module-based directories.
-
-
 
 - **`CircuitConfig.provingKeyPath`** removed from the interface in `src/types.ts` — the `.ark` file path is no longer exposed.
 - Monolithic source files replaced: `src/circuits.ts`, `src/provider.ts`, `src/utils.ts`, `src/wasm-loader.ts`.
