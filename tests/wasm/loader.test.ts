@@ -5,7 +5,7 @@
  * We mock the module to test the loader logic in isolation.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ─── Mock @orbinum/groth16-proofs before importing loader ────────────────────
 
@@ -35,6 +35,85 @@ describe('initWasm', () => {
   it('is idempotent — calling twice does not throw', async () => {
     await initWasm();
     await expect(initWasm()).resolves.toBeUndefined();
+  });
+});
+
+describe('where the browser loads the wasm from', () => {
+  // Each case re-imports the module: `initWasm` caches the instance, and the
+  // configured URL lives beside it. Sharing one instance across these would
+  // test whichever ran first.
+  beforeEach(() => {
+    vi.resetModules();
+    // The loader branches on `typeof self`/`typeof window` to tell a browser
+    // from Node, and these tests run under `environment: 'node'` where both are
+    // undefined. Without this they exercise the Node path — which reads the
+    // file off disk and never calls the init function these assertions read.
+    vi.stubGlobal('self', globalThis);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** The URL `__wbg_init` was actually handed. */
+  async function urlPassedTo(
+    configure: (m: typeof import('../../src/wasm/loader')) => void | Promise<void>
+  ): Promise<unknown> {
+    const wasm = await import('@orbinum/groth16-proofs');
+    const init = wasm.default as unknown as ReturnType<typeof vi.fn>;
+    init.mockClear();
+    const loader = await import('../../src/wasm/loader');
+    await configure(loader);
+    await loader.initWasm();
+    return (init.mock.calls[0]?.[0] as { module_or_path?: unknown })?.module_or_path;
+  }
+
+  it('defaults to the pinned CDN', async () => {
+    expect(await urlPassedTo(() => {})).toMatch(/^https:\/\/unpkg\.com\//);
+  });
+
+  it('uses the URL a host configured', async () => {
+    // The case that forces this to exist: an extension under MV3, whose CSP is
+    // `script-src 'self'`. A CDN fetch is refused there, and a wallet pulling
+    // its prover from a third party at spend time is what that policy exists to
+    // prevent. Such a host bundles the .wasm and names it here.
+    const local = 'chrome-extension://abc/groth16_proofs_bg.wasm';
+    expect(await urlPassedTo(m => m.setWasmUrl(local))).toBe(local);
+  });
+
+  it('accepts the URL through initWasm too', async () => {
+    const local = '/assets/groth16_proofs_bg.wasm';
+    const wasm = await import('@orbinum/groth16-proofs');
+    const init = wasm.default as unknown as ReturnType<typeof vi.fn>;
+    init.mockClear();
+    const loader = await import('../../src/wasm/loader');
+    await loader.initWasm({ wasmUrl: local });
+    expect((init.mock.calls[0]?.[0] as { module_or_path?: unknown })?.module_or_path).toBe(local);
+  });
+
+  it('survives a lazy init, which is the path with nowhere to pass options', async () => {
+    // `compressSnarkjsProofWasm` and `generateProofWasm` both initialize on
+    // demand and take no options. If the configured URL did not outlive the
+    // call that set it, a host that never calls `initWasm` explicitly — the
+    // ordinary case — would silently get the CDN back.
+    const local = 'chrome-extension://abc/groth16_proofs_bg.wasm';
+    const wasm = await import('@orbinum/groth16-proofs');
+    const init = wasm.default as unknown as ReturnType<typeof vi.fn>;
+    init.mockClear();
+    const loader = await import('../../src/wasm/loader');
+
+    loader.setWasmUrl(local);
+    await loader.compressSnarkjsProofWasm({
+      pi_a: ['1', '2', '1'],
+      pi_b: [
+        ['3', '4'],
+        ['5', '6'],
+        ['1', '0'],
+      ],
+      pi_c: ['7', '8', '1'],
+    });
+
+    expect((init.mock.calls[0]?.[0] as { module_or_path?: unknown })?.module_or_path).toBe(local);
   });
 });
 

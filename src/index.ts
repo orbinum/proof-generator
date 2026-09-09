@@ -33,4 +33,5 @@ export {
   hexSignalToBigInt,
   bigIntToHex,
 } from './utils/encoding';
-export { initWasm, compressSnarkjsProofWasm, generateProofWasm } from './wasm';
+export { initWasm, setWasmUrl, compressSnarkjsProofWasm, generateProofWasm } from './wasm';
+export type { InitWasmOptions } from './wasm';
