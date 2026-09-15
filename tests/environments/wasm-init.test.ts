@@ -194,15 +194,37 @@ describe('getNodeRequire', () => {
     expect(() => nodeRequire.resolve('@orbinum/groth16-proofs')).not.toThrow();
   });
 
-  it('reads a module path rather than hardcoding the CWD', async () => {
-    // A source-level assertion, because the runtime one above cannot
-    // distinguish the two anchors while the CWD happens to be correct. If the
-    // CWD ever becomes the only anchor again, this fails and names why.
-    const { readFileSync } = await import('node:fs');
-    const source = readFileSync('src/internal/nodeRequire.ts', 'utf8');
+  it('still resolves when the working directory is somewhere else', async () => {
+    // The assertion above cannot tell the two anchors apart while the CWD
+    // happens to be the project root, which it is under vitest. This one moves
+    // the CWD out and asks again: a CWD-anchored base fails here with
+    // `Cannot find module '@orbinum/groth16-proofs'`, a module-anchored one
+    // does not.
+    //
+    // A behavioural check, not a source-level one. This used to assert that the
+    // source text contained `ownModulePath()` — a proxy for the property that
+    // broke when the helper was simplified to `createRequire` even though the
+    // property itself held. What matters is where resolution starts, not which
+    // function computes it.
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
 
-    expect(source).toContain('ownModulePath()');
-    // The CWD may remain as a fallback, but never as the sole base.
-    expect(source).toMatch(/ownModulePath\(\)\s*\?\?/);
+    const elsewhere = mkdtempSync(join(tmpdir(), 'pg-cwd-'));
+    const original = process.cwd();
+    try {
+      process.chdir(elsewhere);
+      // AFTER the chdir, and with the module cache cleared: `getNodeRequire`
+      // memoises, so a helper another test already resolved would answer from
+      // the cache and this would assert nothing. Verified by mutation — with
+      // the base changed to `process.cwd()`, the cached version still passed.
+      vi.resetModules();
+      const { getNodeRequire } = await import('../../src/internal/nodeRequire');
+      const nodeRequire = await getNodeRequire();
+      expect(() => nodeRequire.resolve('@orbinum/groth16-proofs')).not.toThrow();
+    } finally {
+      process.chdir(original);
+      rmSync(elsewhere, { recursive: true, force: true });
+    }
   });
 });

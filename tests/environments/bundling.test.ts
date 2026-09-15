@@ -78,6 +78,25 @@ describe.skipIf(!built)('the built package', () => {
     }
   });
 
+  it('contains no eval, in either format', () => {
+    // Two `eval`s used to live in `getNodeRequire`, and every bundler that read
+    // this package warned about them — rolldown calls direct eval a security
+    // risk that also breaks minification. Both are gone: `createRequire` exists
+    // in both module systems, and `import()` parses in CommonJS too.
+    //
+    // Worth pinning because the fix bundlers suggest is WRONG for the first of
+    // them. Indirect eval runs in global scope, where `require` is not in
+    // scope: `(0, eval)('require')` returns undefined, so the CommonJS build
+    // would silently fall through to the ESM path and work by accident.
+    //
+    // Matches a call, not the word: a comment explaining this may say `eval`.
+    for (const file of ['index.js', 'index.mjs']) {
+      const source = readFileSync(join(DIST, file), 'utf8');
+      const calls = [...source.matchAll(/(?<![\w$.])eval\s*\(/g)].map(m => m[0]);
+      expect(calls, `dist/${file} calls eval`).toEqual([]);
+    }
+  });
+
   it('reaches Node builtins through the runtime-guarded helper', () => {
     // Non-vacuity for the test above: the Node paths DO use fs and path, just
     // lazily. If the helper vanished, the assertion above would pass for the

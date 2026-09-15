@@ -1,24 +1,38 @@
 /**
  * Reaching Node's `require` from code that is compiled to BOTH module systems.
  *
- * Two facts make this awkward, and neither has an inline solution:
+ * `createRequire` is the one mechanism that exists in both, so there is a
+ * single path rather than a CommonJS branch and an ESM branch. What differs is
+ * only where resolution starts from, and `typeof __filename` answers that at
+ * runtime without either format having to parse the other's syntax.
  *
- *  - **`eval('require')` throws in a real ESM module.** Verified:
- *    `ReferenceError: require is not defined`. It works in the CommonJS output
- *    and fails in the ESM one, from the same source line.
- *  - **`createRequire(import.meta.url)` is a syntax error in CommonJS.**
- *    `import.meta` cannot appear there at all, so the file will not parse —
- *    which means the obvious fix breaks the other half.
+ * **This file used to use `eval` twice, and neither is needed.** The reasons
+ * recorded for them stopped being true:
  *
- * The way out is to ask the runtime what it is, at call time rather than parse
- * time. `eval` keeps `import.meta` out of the source text the CommonJS parser
- * sees, so both builds parse; the branch then picks the mechanism that exists.
+ *  - `eval('require')` was there because a bare `require` fails in a real ESM
+ *    module. But `createRequire` covers CommonJS too, so the branch it guarded
+ *    is gone. Worth stating because the obvious fix is wrong: the `eval` could
+ *    NOT have been made indirect, which is what bundlers suggest. Indirect eval
+ *    runs in global scope, where `require` is not in scope — it returns
+ *    `undefined`, so the CommonJS build would have fallen through to the ESM
+ *    path and worked by accident.
+ *  - `eval('import("node:module")')` was there so the CommonJS build would not
+ *    parse the dynamic import. It parses it fine: Node has supported `import()`
+ *    from CommonJS since v12, and tsup emits it untouched in both formats.
+ *
+ * What the `eval` DID buy, and what replaces it: this source is typechecked as
+ * CommonJS, so writing `import.meta.url` is a compile error (TS1343) even
+ * though the ESM output would accept it. `ownModulePath()` reads the same path
+ * from a stack frame, in code the typechecker can see.
+ *
+ * Neither `import()` here is a static edge, so a bundler does not follow it and
+ * `tests/environments/bundling.test.ts` still passes — it asserts that no Node
+ * builtin is named in a STATIC import.
  *
  * Every caller is already behind a runtime check for Node
  * (`typeof window === 'undefined' && typeof self === 'undefined'`), and this
  * module contains no top-level statement that touches a Node built-in. A
- * browser bundle that includes it does not execute it, and `bundling.test.ts`
- * asserts that Node built-ins are reached lazily, never at module scope.
+ * browser bundle that includes it does not execute it.
  */
 
 /** Cached across calls: resolving costs a dynamic import the first time. */
@@ -39,41 +53,24 @@ export interface NodeRequire {
 export async function getNodeRequire(): Promise<NodeRequire> {
   if (cached) return cached;
 
-  // CommonJS: `require` is in scope. `eval` rather than a bare reference so
-  // a bundler does not try to resolve or shim it.
   try {
-    const fromCjs = eval('typeof require !== "undefined" ? require : undefined') as
-      | NodeRequire
-      | undefined;
-    if (fromCjs) {
-      cached = fromCjs;
-      return cached;
-    }
-  } catch {
-    // Fall through to the ESM path.
-  }
+    const { createRequire } = await import('node:module');
 
-  // ESM: build one with `createRequire`. The `node:module` import sits inside
-  // `eval` so the CommonJS build never parses it and no bundler follows the
-  // edge.
-  //
-  // The base must be THIS module's own path, so resolution starts from the
-  // installed package the way CommonJS `require` does. Anchoring on
-  // `process.cwd()` instead is subtly wrong: it works whenever the process runs
-  // inside the project and fails when it does not — a CLI invoked from
-  // elsewhere, a test runner with its own working directory. Measured: with the
-  // CWD outside the project, the CommonJS build resolved fine while a
-  // CWD-anchored ESM build failed with "Cannot find module".
-  //
-  // `import.meta` cannot supply it. Written literally it stops the CommonJS
-  // build from parsing; inside `eval` it throws, because indirect eval runs in
-  // global scope where `import.meta` is a syntax error. Both measured. A stack
-  // frame carries the same information and parses in either format.
-  try {
-    const { createRequire } = await (eval('import("node:module")') as Promise<{
-      createRequire: (path: string) => NodeRequire;
-    }>);
-    cached = createRequire(ownModulePath() ?? `${process.cwd()}/`);
+    // THIS module's own path, so resolution starts from the installed package
+    // the way CommonJS `require` does. Anchoring on `process.cwd()` instead is
+    // subtly wrong: it works whenever the process runs inside the project and
+    // fails when it does not — a CLI invoked from elsewhere, a test runner with
+    // its own working directory. Measured: with the CWD outside the project, a
+    // CWD-anchored build failed with "Cannot find module".
+    //
+    // `__filename` exists in the CommonJS output and is exact. The ESM output
+    // has `import.meta.url` instead, but it cannot be WRITTEN here: this source
+    // is typechecked under `module: CommonJS`, where `import.meta` is TS1343.
+    // Hiding it inside `eval` is what this file used to do. A stack frame
+    // carries the same path and is ordinary code.
+    const base = typeof __filename !== 'undefined' ? __filename : ownModulePath();
+
+    cached = createRequire(base ?? `${process.cwd()}/`) as NodeRequire;
     return cached;
   } catch (error) {
     throw new Error(
@@ -85,10 +82,12 @@ export async function getNodeRequire(): Promise<NodeRequire> {
 /**
  * This module's own file path, read from a stack frame.
  *
- * The frame below `Error` is the caller inside this file, so its path is this
- * module's. Returns null when the stack is absent or shaped unexpectedly, and
- * the caller then falls back to the working directory — right more often than
- * it is wrong, and never worse than what this replaced.
+ * Only the ESM output needs it — CommonJS has `__filename`. The frame below
+ * `Error` is the caller inside this file, so its path is this module's.
+ *
+ * Returns null when the stack is absent or shaped unexpectedly, and the caller
+ * then falls back to the working directory: right more often than it is wrong,
+ * and no worse than having no base at all.
  */
 function ownModulePath(): string | null {
   for (const frame of (new Error().stack ?? '').split('\n').slice(1)) {
