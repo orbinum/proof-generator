@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.1.1] - 2026-09-15
+
+### Fixed
+
+- **`getNodeRequire` no longer calls `eval`.** Two direct calls lived in
+  `src/internal/nodeRequire.ts`, and every bundler that read this package warned
+  about them — rolldown calls direct eval a security risk that also breaks
+  minification, and a wallet extension building against it saw the warning on
+  every build.
+
+  Both are gone, and the module is one code path instead of two. `createRequire`
+  exists under CommonJS as well as ESM, so the branch that read `require` from
+  scope is unnecessary; and `import()` parses in CommonJS too — Node has
+  supported it since v12 — so hiding the dynamic import from the CommonJS parser
+  bought nothing.
+
+  Worth recording because **the fix bundlers suggest is wrong here.** Indirect
+  eval (`(0, eval)(…)`) runs in global scope, where `require` is not in scope:
+  it returns `undefined`, so the CommonJS build would have fallen through to the
+  ESM path and worked by accident until it did not. Measured, not assumed.
+
+  What the `eval` did buy, and what replaces it: this source is typechecked
+  under `module: CommonJS`, where writing `import.meta.url` is a compile error
+  (TS1343) even though the ESM output would accept it. The base is now
+  `__filename` where it exists and a stack-frame path otherwise — ordinary code
+  the typechecker can see.
+
+  No API change. Resolution still anchors on this module rather than the working
+  directory, which is what lets a consumer invoke the package from anywhere.
+
+### Added
+
+- **Three checks that pin the above**, each verified by mutation:
+  `bundling.test.ts` asserts the built output calls `eval` in neither format;
+  `tests/environments/nodeRequire.test.ts` runs the BUILT bundle in a subprocess
+  in both module systems, from outside the project, and requires the WASM to
+  initialise — the check that tells a working `require` from an `undefined` one,
+  which no static assertion can; and the CWD test in `wasm-init.test.ts` now
+  moves the working directory and asks again, where it previously asserted that
+  the source text contained a particular function name.
+
 ## [7.1.0] - 2026-09-09
 
 ### Added

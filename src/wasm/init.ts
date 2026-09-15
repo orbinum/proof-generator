@@ -23,9 +23,10 @@ function isNode(): boolean {
 /**
  * Node: load the WASM binary from disk and instantiate synchronously.
  *
- * `getNodeRequire()` rather than `eval('require')`: the latter works in the
- * CommonJS build and throws `ReferenceError: require is not defined` in the
- * ESM one, from the same source line.
+ * `getNodeRequire()` rather than a bare `require`: that works in the CommonJS
+ * build and throws `ReferenceError: require is not defined` in the ESM one,
+ * from the same source line. The helper builds one with `createRequire`, which
+ * both formats have.
  */
 async function initFromDisk(wasm: WasmModule): Promise<void> {
   const requireFn = await getNodeRequire();
