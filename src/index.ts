@@ -16,8 +16,15 @@ export * from './errors';
 export { getCircuitConfig } from './circuits';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
-export { NodeArtifactProvider, WebArtifactProvider } from './providers';
-export type { ArtifactProvider, WebProviderOptions, ResolvedCircuitVersion } from './providers';
+export { NodeArtifactProvider, WebArtifactProvider, CIRCUITS_PACKAGE_VERSION } from './providers';
+export type {
+  ArtifactProvider,
+  NodeProviderOptions,
+  WebProviderOptions,
+  ResolvedCircuitVersion,
+  CircuitsManifest,
+  CircuitVersions,
+} from './providers';
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 export { validateInputs, validatePublicSignals, validateProofSize } from './utils/validation';

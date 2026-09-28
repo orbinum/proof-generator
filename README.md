@@ -56,13 +56,12 @@ Benchmarked on Apple M-series (Node.js, 3 runs post-warmup):
 
 | Circuit | snarkjs backend | arkworks backend | First call overhead |
 |---------|----------------|-----------------|---------------------|
-| ValueProof | ~91ms | ~262ms | +1.5–2s (WASM init) |
 | Unshield | ~407ms | ~2.1s | +1.5–2s (WASM init) |
 | Transfer | ~1.1s | ~7.2s | +1.5–2s (WASM init) |
 
 > **snarkjs backend** (default): uses snarkjs `fullProve` with `.zkey` proving keys — fastest option post-warmup.
 >
-> **arkworks backend**: uses snarkjs witness-only + arkworks WASM with `.ark` proving keys — ~3× slower for small circuits (ValueProof), ~5× slower for large circuits (Unshield, Transfer). `.ark` artifacts are 2–3× smaller than `.zkey`.
+> **arkworks backend**: uses snarkjs witness-only + arkworks WASM with `.ark` proving keys — ~5× slower (Unshield, Transfer). `.ark` artifacts are 2–3× smaller than `.zkey`.
 
 The first proof call in a process incurs the WASM initialization overhead (~1.5–2s). All subsequent proofs skip this.
 
@@ -70,8 +69,6 @@ The first proof call in a process incurs the WASM initialization overhead (~1.5�
 
 | Circuit | Backend | Load | Witness | Serialize | Prove | Compress | Total |
 |---------|---------|------|---------|-----------|-------|----------|-------|
-| ValueProof | snarkjs | 9ms | — | — | 91ms | — | 100ms |
-| ValueProof | arkworks | — | 24ms | 3ms | 234ms | — | 262ms |
 | Unshield | snarkjs | 21ms | — | — | 367ms | — | 388ms |
 | Unshield | arkworks | 8ms | 28ms | 26ms | 1965ms | — | 2027ms |
 | Transfer | snarkjs | 54ms | — | — | 1094ms | — | 1148ms |
@@ -81,11 +78,15 @@ The first proof call in a process incurs the WASM initialization overhead (~1.5�
 
 ## Supported Circuits
 
-| Circuit     | Use Case                                         |
-| ----------- | ------------------------------------------------ |
-| Unshield    | Withdraw from pool to public address             |
-| Transfer    | Private-to-private transfer                      |
-| ValueProof  | Prove note value without revealing full details  |
+| Circuit     | Versions | Use Case                             |
+| ----------- | -------- | ------------------------------------ |
+| Unshield    | 1, 2     | Withdraw from pool to public address |
+| Transfer    | 1, 2     | Private-to-private transfer          |
+
+v2 (active since `@orbinum/circuits` 0.15.0) binds the encrypted memos to the
+proof through an extra `memo_hash` public input. The providers serve the
+manifest's active version unless a circuit is pinned, and verify every artifact
+against the manifest's sha256; see [docs/usage.md](docs/usage.md#circuit-versions).
 
 ## Related Packages
 

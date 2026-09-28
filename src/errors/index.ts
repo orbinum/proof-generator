@@ -28,6 +28,16 @@ export class CircuitNotFoundError extends ProofGeneratorError {
   }
 }
 
+/** The caller asked for one circuit version and the provider serves another. */
+export class CircuitVersionMismatchError extends ProofGeneratorError {
+  constructor(circuitType: CircuitType, requested: number, served: number) {
+    super(
+      `Circuit ${circuitType}: requested version ${requested}, but the provider serves version ${served}`,
+      'CIRCUIT_VERSION_MISMATCH'
+    );
+  }
+}
+
 export class InvalidInputsError extends ProofGeneratorError {
   constructor(message: string) {
     super(message, 'INVALID_INPUTS');

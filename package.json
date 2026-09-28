@@ -1,6 +1,6 @@
 {
   "name": "@orbinum/proof-generator",
-  "version": "7.1.1",
+  "version": "8.0.0",
   "description": "ZK-SNARK proof generator for Orbinum. Combines snarkjs (witness) with arkworks WASM (proof generation) to produce 128-byte Groth16 proofs.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -50,7 +50,7 @@
     "orbinum"
   ],
   "dependencies": {
-    "@orbinum/circuits": "0.14.0",
+    "@orbinum/circuits": "0.15.0",
     "@orbinum/groth16-proofs": "4.1.0",
     "snarkjs": "0.7.6"
   },

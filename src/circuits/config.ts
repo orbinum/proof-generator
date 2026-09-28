@@ -1,32 +1,34 @@
 import { CircuitType, CircuitConfig } from './types';
 
 /**
- * Returns the circuit configuration (artifact filenames, expected public
- * signals) for the given circuit type.
+ * Public signals per circuit and version. A version is a published circuit, so
+ * its arity is fixed forever; a new layout is a new version.
+ *
+ * v2 appends `memo_hash` to transfer and unshield, binding the encrypted memos
+ * to the proof.
  */
-export function getCircuitConfig(circuitType: CircuitType): CircuitConfig {
-  const name = circuitType.toLowerCase();
-  return {
-    name,
-    wasmPath: `${name}.wasm`,
-    zkeyPath: `${name}_pk.zkey`,
-    provingKeyPath: `${name}_pk.ark`,
-    expectedPublicSignals: getExpectedPublicSignals(circuitType),
-  };
-}
+const PUBLIC_SIGNALS: Record<CircuitType, Record<number, number>> = {
+  // v1: [merkle_root, nullifier, amount, recipient, asset_id, fee, change_commitment]
+  [CircuitType.Unshield]: { 1: 7, 2: 8 },
+  // v1: [merkle_root, nullifiers[2], commitments[2], asset_id, fee]
+  [CircuitType.Transfer]: { 1: 7, 2: 8 },
+};
 
-function getExpectedPublicSignals(circuitType: CircuitType): number {
-  switch (circuitType) {
-    case CircuitType.Unshield:
-      // [merkle_root, nullifier, amount, recipient, asset_id, fee, change_commitment]
-      return 7;
-    case CircuitType.Transfer:
-      // [merkle_root, nullifiers[2], commitments[2], asset_id, fee]
-      return 7;
-    case CircuitType.ValueProof:
-      // [commitment, value, asset_id, owner_hash]
-      return 4;
-    default:
-      throw new Error(`Unknown circuit type: ${circuitType}`);
+/**
+ * The shape (name, expected public signals) of one version of a circuit
+ * (default version 1).
+ *
+ * Fail-closed: an unknown circuit or version throws rather than guessing an
+ * arity, since a wrong count would validate a proof against the wrong statement.
+ */
+export function getCircuitConfig(circuitType: CircuitType, circuitVersion = 1): CircuitConfig {
+  const byVersion = PUBLIC_SIGNALS[circuitType];
+  if (!byVersion) {
+    throw new Error(`Unknown circuit type: ${circuitType}`);
   }
+  const expectedPublicSignals = byVersion[circuitVersion];
+  if (expectedPublicSignals === undefined) {
+    throw new Error(`Unknown version ${circuitVersion} for circuit ${circuitType}`);
+  }
+  return { name: circuitType, version: circuitVersion, expectedPublicSignals };
 }

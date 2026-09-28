@@ -32,7 +32,6 @@ inputs → snarkjs.groth16.fullProve(inputs, wasm, zkey)
 
 | Circuit | Load | Prove (fullProve) | Compress | Total |
 |---------|------|-------------------|----------|-------|
-| ValueProof | 9ms | 82ms | 1ms | ~91ms |
 | Unshield | 21ms | 365ms | — | ~386ms |
 | Transfer | 54ms | 1094ms | — | ~1148ms |
 
@@ -51,7 +50,6 @@ The arkworks backend splits the work in two: snarkjs calculates the witness in m
 
 | Circuit | Load | Witness | Serialize | Prove (WASM) | Total |
 |---------|------|---------|-----------|--------------|-------|
-| ValueProof | — | 24ms | 3ms | 234ms | ~262ms |
 | Unshield | 8ms | 29ms | 27ms | 1955ms | ~2019ms |
 | Transfer | 27ms | 78ms | 99ms | 7093ms | ~7297ms |
 
@@ -65,11 +63,10 @@ Measured on Apple M-series, Node.js ≥ 22, 3 runs post-warmup (median reported)
 
 | Circuit | snarkjs | arkworks | Ratio |
 |---------|---------|----------|-------|
-| ValueProof | 91ms | 262ms | 0.35× |
 | Unshield | 380ms | 2061ms | 0.18× |
 | Transfer | 1148ms | 7041ms | 0.16× |
 
-snarkjs is consistently **3–5× faster** than arkworks post-warmup.
+snarkjs is consistently **5–6× faster** than arkworks post-warmup.
 
 ### First-call overhead
 

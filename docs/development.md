@@ -36,12 +36,13 @@ proof-generator/
 │   │   ├── index.ts               generateProof() entry point
 │   │   ├── types.ts               GenerateOptions interface
 │   │   ├── provider.ts            resolveProvider() — auto-detects environment
+│   │   ├── version.ts             resolveCircuitVersion() — which version to prove
 │   │   └── backends/
 │   │       ├── snarkjs.ts         runSnarkjsBackend()
 │   │       └── arkworks.ts        runArkworksBackend()
 │   │
-│   ├── circuits/                  Circuit configuration
-│   │   ├── config.ts              getCircuitConfig()
+│   ├── circuits/                  Circuit shapes
+│   │   ├── config.ts              getCircuitConfig(type, version) — public-signal count
 │   │   ├── index.ts               Re-exports
 │   │   └── types.ts               CircuitType, CircuitInputs, ProofResult, CircuitConfig
 │   │
@@ -49,9 +50,10 @@ proof-generator/
 │   │   └── index.ts               Error class hierarchy
 │   │
 │   ├── providers/                 Artifact providers
-│   │   ├── interface.ts           ArtifactProvider interface
-│   │   ├── node.ts                NodeArtifactProvider
-│   │   ├── web.ts                 WebArtifactProvider
+│   │   ├── interface.ts           ArtifactProvider, ResolvedCircuitVersion
+│   │   ├── manifest.ts            Circuits manifest: types, version resolution, file names
+│   │   ├── node.ts                NodeArtifactProvider (disk)
+│   │   ├── web.ts                 WebArtifactProvider (HTTP)
 │   │   └── index.ts               Re-exports
 │   │
 │   ├── wasm/                      WASM module management
@@ -61,6 +63,7 @@ proof-generator/
 │   └── utils/
 │       ├── encoding.ts            bigIntToBytes32, hexSignalToBigInt, …
 │       ├── formatting.ts          normalizeProofHex, formatPublicSignalsArray, …
+│       ├── integrity.ts           sha256Hex, verifySha256
 │       └── validation.ts          validateInputs, validatePublicSignals, validateProofSize
 │
 ├── tests/                         Mirrors src/ structure
@@ -72,9 +75,13 @@ proof-generator/
 │   ├── errors/
 │   │   └── index.test.ts          Error class hierarchy
 │   ├── circuits/
-│   │   └── config.test.ts         Circuit config resolution
+│   │   ├── circuit-id.test.ts     On-chain id mapping
+│   │   └── config.test.ts         Shape per circuit version
 │   ├── providers/
+│   │   ├── fixture.ts             A throwaway circuits package (v1 + v2)
+│   │   ├── manifest.test.ts       Version resolution and file-name rules
 │   │   ├── node.test.ts           NodeArtifactProvider
+│   │   ├── pin.test.ts            Circuits release pin == dependency
 │   │   └── web.test.ts            WebArtifactProvider
 │   ├── utils/
 │   │   ├── encoding.test.ts
@@ -82,11 +89,7 @@ proof-generator/
 │   │   └── validation.test.ts
 │   ├── wasm/
 │   │   └── loader.test.ts
-│   └── e2e/proving.test.ts        Real proofs for all three circuits, both backends
-│
-├── scripts/
-│   ├── benchmark.ts               Full proof benchmark (all circuits × backends)
-│   └── test-ark-backend.ts        arkworks backend smoke test
+│   └── e2e/proving.test.ts        Real proofs for every circuit version, both backends
 │
 ├── docs/
 │   ├── api.md                     Complete API reference
@@ -191,11 +194,17 @@ export async function generateProof(
 ```
 
 Flow:
-1. `validateInputs(inputs)` — throws `InvalidInputsError` on bad inputs
-2. `resolveProvider(options.provider)` — auto-detect or use override
-3. `getCircuitConfig(circuitType)` — resolve artifact paths
-4. `runSnarkjsBackend(...)` or `runArkworksBackend(...)` depending on `options.backend`
-5. `validatePublicSignals(...)` — throws `ProofGenerationError` on invalid output
+1. `resolveProvider(options.provider)` — auto-detect or use override
+2. `resolveCircuitVersion(provider, circuitType, options.circuitVersion)` — the
+   provider's version when it reports one (a disagreeing `circuitVersion` throws
+   `CircuitVersionMismatchError`), else `circuitVersion`, else 1
+3. `getCircuitConfig(circuitType, version)` — that version's public-signal count;
+   an unknown version throws
+4. `validateInputs(inputs)` — throws `InvalidInputsError` on bad inputs
+5. `runSnarkjsBackend(...)` or `runArkworksBackend(...)` depending on `options.backend`
+6. `validatePublicSignals(...)` — throws `ProofGenerationError` on a wrong count
+
+Steps 1–4 run before any proving, so a misconfiguration fails in milliseconds.
 
 ### `src/generate/provider.ts`
 
@@ -237,6 +246,7 @@ ProofGeneratorError (base, has .code)
 ├── WitnessCalculationError  (code: 'WITNESS_CALCULATION_FAILED')
 ├── ProofGenerationError     (code: 'PROOF_GENERATION_FAILED')
 ├── CircuitNotFoundError     (code: 'CIRCUIT_NOT_FOUND')
+├── CircuitVersionMismatchError (code: 'CIRCUIT_VERSION_MISMATCH')
 └── InvalidInputsError       (code: 'INVALID_INPUTS')
 ```
 
@@ -258,9 +268,10 @@ export async function generateProofWasm(artifactBytes, witnessBytes): Promise<{ 
 User Input
     ↓
 generateProof()
-    ↓ [validateInputs]
     ↓ [resolveProvider]
+    ↓ [resolveCircuitVersion]
     ↓ [getCircuitConfig]
+    ↓ [validateInputs]
     ├── backend: 'snarkjs' (default) ──────────────────────────────────▮
     │   getCircuitWasm + getCircuitZkey                              │
     │   → snarkjs.groth16.fullProve                                  │
@@ -325,9 +336,8 @@ node_modules/
 │   ├── transfer.wasm
 │   ├── transfer_pk.ark
 │   ├── transfer_pk.zkey
-│   ├── value_proof.wasm
-│   ├── value_proof_pk.ark
-│   ├── value_proof_pk.zkey
+│   ├── transfer_v2.wasm, transfer_v2_pk.ark, transfer_v2_pk.zkey   (and unshield_v2_*)
+│   └── manifest.json   (versions, file names, sha256)
 └── @orbinum/groth16-proofs/
     ├── groth16_proofs_bg.wasm
     ├── groth16_proofs.js
@@ -535,14 +545,24 @@ Automatically publishes to npm.
 
 ## Common Development Tasks
 
+### Add a circuit version
+
+1. Publish it in `@orbinum/circuits`, bump the dependency and
+   `CIRCUITS_PACKAGE_VERSION` (`src/providers/manifest.ts`) together
+2. Add its public-signal count to `PUBLIC_SIGNALS` in `src/circuits/config.ts`
+3. Add a case to `tests/circuits/config.test.ts`, and inputs for it to
+   `tests/e2e/inputs.ts` (`inputsFor`) and a version to `CASES` in
+   `tests/e2e/proving.test.ts`
+4. Update the Supported Circuits tables in `docs/api.md` and `docs/usage.md`
+
+File names need no code: the providers take them from the manifest.
+
 ### Add a new circuit
 
-1. Add the circuit type to `src/circuits/types.ts` (`CircuitType` enum)
-2. Add its config entry in `src/circuits/config.ts` (`getCircuitConfig` switch)
-3. Ensure `@orbinum/circuits` package includes the new artifact files
-4. Add unit tests in `tests/circuits/config.test.ts`
-5. Add the circuit to `tests/e2e/proving.test.ts` and its inputs to `tests/e2e/inputs.ts`
-6. Update `docs/api.md` (Supported Circuits table)
+1. Add the circuit type to `src/circuits/types.ts` (`CircuitType` enum) and its
+   on-chain id to `CIRCUIT_ID`
+2. Add its versions to `PUBLIC_SIGNALS` in `src/circuits/config.ts`
+3. Then as for a version, above
 
 ### Update dependencies
 
@@ -562,7 +582,7 @@ git push --tags
 
 ### Measure proving cost
 
-There is no benchmark script; `pnpm test:e2e` proves all three circuits with
+There is no benchmark script; `pnpm test:e2e` proves every circuit version with
 both backends and vitest reports each duration, which is the same measurement
 without a second thing to keep in sync.
 

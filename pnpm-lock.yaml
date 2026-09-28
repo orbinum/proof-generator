@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@orbinum/circuits':
-        specifier: 0.14.0
-        version: 0.14.0
+        specifier: 0.15.0
+        version: 0.15.0
       '@orbinum/groth16-proofs':
         specifier: 4.1.0
         version: 4.1.0
@@ -264,8 +264,8 @@ packages:
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
 
-  '@orbinum/circuits@0.14.0':
-    resolution: {integrity: sha512-RTYp3g0SZoe0Mm5nKpfNjbIuOIU/vCZmem82mr4d8erEah0xbmijr6oFXCN3W2QOA8miTSS3E6c7N59Wxdwwrg==}
+  '@orbinum/circuits@0.15.0':
+    resolution: {integrity: sha512-GznmTdxf7dawqRlbo/QGZ2Lrq8DPsoI5k7Q7bZ/avEgtcSdYjZxNj5HrKkkVtY0jyVoGUUdr1pkJyBd/4Kj0pA==}
     engines: {node: '>=18.0.0'}
 
   '@orbinum/groth16-proofs@4.1.0':
@@ -1306,7 +1306,7 @@ snapshots:
 
   '@noble/hashes@1.8.0': {}
 
-  '@orbinum/circuits@0.14.0': {}
+  '@orbinum/circuits@0.15.0': {}
 
   '@orbinum/groth16-proofs@4.1.0': {}
 
