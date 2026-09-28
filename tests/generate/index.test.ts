@@ -8,7 +8,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { generateProof } from '../../src/generate';
 import { CircuitType } from '../../src/circuits/types';
-import { CircuitNotFoundError, ProofGenerationError, InvalidInputsError } from '../../src/errors';
+import {
+  CircuitNotFoundError,
+  CircuitVersionMismatchError,
+  ProofGenerationError,
+  InvalidInputsError,
+} from '../../src/errors';
 import type { ArtifactProvider } from '../../src/providers/interface';
 
 // ─── Mock @orbinum/groth16-proofs ─────────────────────────────────────────────
@@ -188,6 +193,96 @@ describe('generateProof — snarkjs backend (default)', () => {
     await expect(
       generateProof(CircuitType.Unshield, VALID_INPUTS, { provider })
     ).rejects.toBeInstanceOf(ProofGenerationError);
+  });
+
+  it('validates the signal count of the requested circuit version', async () => {
+    const snarkjs = await import('snarkjs');
+    const v2Signals = ['10', '20', '30', '40', '50', '60', '70', '80'];
+    vi.mocked(snarkjs.groth16.fullProve).mockResolvedValueOnce({
+      proof: {
+        pi_a: ['1', '2', '1'],
+        pi_b: [
+          ['3', '4'],
+          ['5', '6'],
+          ['1', '0'],
+        ],
+        pi_c: ['7', '8', '1'],
+      } as any,
+      publicSignals: v2Signals,
+    });
+    const result = await generateProof(CircuitType.Unshield, VALID_INPUTS, {
+      provider,
+      circuitVersion: 2,
+    });
+    expect(result.publicSignals).toHaveLength(8);
+  });
+
+  it('rejects a v1-shaped proof when version 2 was requested', async () => {
+    await expect(
+      generateProof(CircuitType.Unshield, VALID_INPUTS, { provider, circuitVersion: 2 })
+    ).rejects.toThrow('expected 8, got 7');
+  });
+});
+
+// ─── circuit version resolution ───────────────────────────────────────────────
+
+describe('generateProof — circuit version', () => {
+  /** A provider that says which version its artifacts belong to. */
+  const versioned = (version: number): ArtifactProvider => ({
+    ...makeSnarkjsProvider(),
+    getResolvedVersion: vi
+      .fn()
+      .mockResolvedValue({ version, packageVersion: '0.15.0', vkHash: '0x' }),
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('takes the version from the provider when it reports one', async () => {
+    const snarkjs = await import('snarkjs');
+    vi.mocked(snarkjs.groth16.fullProve).mockResolvedValueOnce({
+      proof: {
+        pi_a: ['1', '2', '1'],
+        pi_b: [
+          ['3', '4'],
+          ['5', '6'],
+          ['1', '0'],
+        ],
+        pi_c: ['7', '8', '1'],
+      } as any,
+      publicSignals: ['1', '2', '3', '4', '5', '6', '7', '8'],
+    });
+    const result = await generateProof(CircuitType.Transfer, VALID_INPUTS, {
+      provider: versioned(2),
+    });
+    expect(result.publicSignals).toHaveLength(8);
+  });
+
+  it('fails before proving when the caller and the provider disagree', async () => {
+    const snarkjs = await import('snarkjs');
+    await expect(
+      generateProof(CircuitType.Transfer, VALID_INPUTS, {
+        provider: versioned(2),
+        circuitVersion: 1,
+      })
+    ).rejects.toBeInstanceOf(CircuitVersionMismatchError);
+    expect(snarkjs.groth16.fullProve).not.toHaveBeenCalled();
+  });
+
+  it('fails before proving on a version this package has no shape for', async () => {
+    const snarkjs = await import('snarkjs');
+    await expect(
+      generateProof(CircuitType.Transfer, VALID_INPUTS, { provider: versioned(3) })
+    ).rejects.toThrow('Unknown version 3');
+    expect(snarkjs.groth16.fullProve).not.toHaveBeenCalled();
+  });
+
+  it('a provider that cannot report a version defaults to 1', async () => {
+    const result = await generateProof(CircuitType.Transfer, VALID_INPUTS, {
+      provider: makeSnarkjsProvider(),
+    });
+    expect(result.publicSignals).toHaveLength(7);
   });
 });
 

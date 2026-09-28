@@ -1,19 +1,18 @@
 /**
  * Tests: WebArtifactProvider
  *
- * Two modes:
- *   - Legacy (string arg): direct URL construction, no manifest fetch.
- *   - Manifest (no arg / options object): fetches manifest.json from npm CDN,
- *     resolves versioned artifact URLs from it.
+ * Fetches manifest.json from the pinned CDN release (or a `baseUrl` mirror) and
+ * resolves versioned artifact URLs, served next to the manifest, from it.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { WebArtifactProvider } from '../../src/providers';
+import { WebArtifactProvider, CIRCUITS_PACKAGE_VERSION } from '../../src/providers';
 import { CircuitType } from '../../src/circuits/types';
 
 // ─── Shared mock manifest ─────────────────────────────────────────────────────
 
 const MOCK_PKG_VERSION = '0.4.4';
+const PINNED = `https://unpkg.com/@orbinum/circuits@${CIRCUITS_PACKAGE_VERSION}`;
 
 // The manifest-mode tests mock every artifact fetch as 8 zero bytes
 // (`new ArrayBuffer(8)`); this is their real sha256, so the integrity check
@@ -95,12 +94,12 @@ function mockManifestThenArtifact() {
 
 // ─── Manifest mode ────────────────────────────────────────────────────────────
 
-describe('WebArtifactProvider — manifest mode (npm CDN)', () => {
+describe('WebArtifactProvider — manifest resolution', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('fetches manifest then pins WASM URL to package_version', async () => {
+  it('fetches the pinned release manifest, then the WASM next to it', async () => {
     mockManifestThenArtifact();
 
     const provider = new WebArtifactProvider();
@@ -108,21 +107,21 @@ describe('WebArtifactProvider — manifest mode (npm CDN)', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(
-      'https://unpkg.com/@orbinum/circuits/manifest.json'
+      `${PINNED}/manifest.json`
     );
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe(
-      `https://unpkg.com/@orbinum/circuits@${MOCK_PKG_VERSION}/unshield.wasm`
+      `${PINNED}/unshield.wasm`
     );
   });
 
-  it('pins zkey URL to package_version', async () => {
+  it('serves the zkey from the pinned release', async () => {
     mockManifestThenArtifact();
 
     const provider = new WebArtifactProvider();
     await provider.getCircuitZkey(CircuitType.Transfer);
 
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe(
-      `https://unpkg.com/@orbinum/circuits@${MOCK_PKG_VERSION}/transfer_pk.zkey`
+      `${PINNED}/transfer_pk.zkey`
     );
   });
 
@@ -181,9 +180,7 @@ describe('WebArtifactProvider — manifest mode (npm CDN)', () => {
 
     const artifactUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0];
     // v1 filename is 'unshield.wasm'
-    expect(artifactUrl).toBe(
-      `https://unpkg.com/@orbinum/circuits@${MOCK_PKG_VERSION}/unshield.wasm`
-    );
+    expect(artifactUrl).toBe(`${PINNED}/unshield.wasm`);
   });
 
   it('throws when requested circuit version is not in supported_versions', async () => {
@@ -259,7 +256,7 @@ describe('WebArtifactProvider — manifest mode (npm CDN)', () => {
     await provider.getCircuitProvingKey!(CircuitType.Unshield);
 
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe(
-      `https://unpkg.com/@orbinum/circuits@${MOCK_PKG_VERSION}/unshield_pk.ark`
+      `${PINNED}/unshield_pk.ark`
     );
   });
 
@@ -357,5 +354,32 @@ describe('WebArtifactProvider — integrity + resolved version', () => {
     await expect(provider.getResolvedVersion(CircuitType.Unshield)).rejects.toThrow(
       /no longer supported/
     );
+  });
+
+  it('a failed manifest fetch is retried on the next call', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 503 })
+        .mockResolvedValueOnce({ ok: true, json: async () => buildMockManifest() })
+    );
+    const provider = new WebArtifactProvider();
+    await expect(provider.getResolvedVersion(CircuitType.Unshield)).rejects.toThrow('503');
+    await expect(provider.getResolvedVersion(CircuitType.Unshield)).resolves.toMatchObject({
+      version: 1,
+    });
+  });
+
+  it('refuses a manifest file name that points outside the release', async () => {
+    const manifest = buildMockManifest();
+    manifest.circuits.unshield.versions['1'].artifacts.wasm.file = '../evil.wasm';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => manifest }));
+    const provider = new WebArtifactProvider();
+    await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
+      'unsafe artifact file name'
+    );
+    // Refused before any artifact request.
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -2,6 +2,13 @@ import type { ArtifactProvider } from '../providers/interface';
 
 export interface GenerateOptions {
   verbose?: boolean;
+  /**
+   * Circuit version the proof is for; decides how many public signals it must
+   * carry (v2 transfer/unshield add `memo_hash`). When the provider reports its
+   * version (`getResolvedVersion`), that version is used and this, if given,
+   * must match it. Otherwise it defaults to 1.
+   */
+  circuitVersion?: number;
   provider?: ArtifactProvider;
   /** Proof generation backend. Defaults to `'snarkjs'`. */
   backend?: 'snarkjs' | 'arkworks';

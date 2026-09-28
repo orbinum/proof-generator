@@ -62,39 +62,8 @@ See [backends.md](./backends.md) for a full comparison of speed and artifact siz
 
 | Circuit | `CircuitType` | Public signals | Use case |
 |---------|--------------|----------------|----------|
-| Unshield | `CircuitType.Unshield` | 7 | Withdraw from pool to public address |
-| Transfer | `CircuitType.Transfer` | 7 | Private-to-private transfer |
-| ValueProof | `CircuitType.ValueProof` | 4 | Prove note value and ownership without revealing the spending key |
-
----
-
-## Value Proof
-
-The `ValueProof` circuit has a dedicated helper that computes `owner_hash = Poseidon(ownerPubkey)` and decodes the public signals into named fields:
-
-```typescript
-import { generateValueProof } from '@orbinum/proof-generator';
-
-const result = await generateValueProof(
-  1000n,       // value (bigint, u64)
-  pubkey,      // ownerPubkey (bigint, BN254 scalar)
-  blinding,    // blinding factor (bigint)
-  1n,          // assetId (bigint, u32)
-  commitment,  // note commitment (bigint)
-);
-
-console.log(result.proof);         // "0x..." (128 bytes)
-console.log(result.publicSignals); // 4 hex signals
-console.log(result.decoded);
-// {
-//   commitment: "0x...",
-//   value: "1000",    // decimal string
-//   assetId: 1,       // number
-//   ownerHash: "0x..." // Poseidon(ownerPubkey)
-// }
-```
-
-You can also use `generateProof(CircuitType.ValueProof, inputs)` directly if you build the circuit inputs object manually.
+| Unshield | `CircuitType.Unshield` | 7 (v1) / 8 (v2, `memo_hash`) | Withdraw from pool to public address |
+| Transfer | `CircuitType.Transfer` | 7 (v1) / 8 (v2, `memo_hash`) | Private-to-private transfer |
 
 ---
 
@@ -102,14 +71,17 @@ You can also use `generateProof(CircuitType.ValueProof, inputs)` directly if you
 
 By default, the library auto-detects the environment:
 - **Node.js**: reads artifacts from `node_modules/@orbinum/circuits` on disk.
-- **Browser / Web Worker**: fetches artifacts from the npm CDN (unpkg).
+- **Browser / Web Worker**: fetches the pinned `@orbinum/circuits` release from the npm CDN (unpkg).
+
+Both go through the package's `manifest.json`, which picks each circuit's version
+and file names, and verify every artifact's sha256 against it.
 
 ### Custom artifact directory (Node.js)
 
 ```typescript
 import { generateProof, NodeArtifactProvider, CircuitType } from '@orbinum/proof-generator';
 
-const provider = new NodeArtifactProvider('/path/to/my/artifacts');
+const provider = new NodeArtifactProvider({ packageRoot: '/path/to/circuits-package' });
 
 const result = await generateProof(CircuitType.Transfer, inputs, { provider });
 ```
@@ -126,13 +98,21 @@ const provider = new WebArtifactProvider({
 const result = await generateProof(CircuitType.Transfer, inputs, { provider });
 ```
 
-The `WebArtifactProvider` in manifest mode (default, no options) fetches a `manifest.json` from the CDN to resolve exact versioned artifact filenames. You can pin specific circuits to a version:
+### Circuit versions
+
+Each provider serves the manifest's `active_version` (v2 for transfer and
+unshield since `@orbinum/circuits` 0.15.0) unless a circuit is pinned:
 
 ```typescript
 const provider = new WebArtifactProvider({
-  circuitVersions: { unshield: 1 }, // force v1 unshield artifacts
+  circuitVersions: { unshield: 1 }, // v1 unshield artifacts
 });
 ```
+
+`generateProof` asks the provider which version it serves and checks the proof
+against that version's public-signal count. v2 transfer/unshield take an extra
+`memo_hash` input and emit 8 signals. Passing `circuitVersion` is optional; if
+given, it must match the provider's version, else `CircuitVersionMismatchError`.
 
 ---
 

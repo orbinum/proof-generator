@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [8.0.0] - 2026-09-28
+
+**Breaking** — `ValueProof` is removed and `CircuitConfig` loses its file
+names. Requires `@orbinum/circuits` 0.15.0 (a dependency).
+
+### Added
+
+- **Circuit versions.** Transfer and unshield have a v1 (7 public signals) and a
+  v2 (8: `memo_hash` appended, binding the encrypted memos to the proof).
+  `getCircuitConfig(type, version)` returns that version's shape and throws on
+  an unknown one instead of guessing an arity.
+- **`generateProof` proves the version the provider serves.** A provider that
+  reports its version (`getResolvedVersion`, now an optional member of
+  `ArtifactProvider`) decides the expected arity; a `circuitVersion` option that
+  disagrees throws `CircuitVersionMismatchError` before any proving. A provider
+  that cannot report one uses `circuitVersion`, or 1.
+- **`NodeArtifactProvider` is manifest-driven**, like the web provider: it reads
+  the package's `manifest.json`, serves the active version unless pinned
+  (`new NodeArtifactProvider({ packageRoot?, circuitVersions? })`; a bare string
+  is still the package root), implements `getResolvedVersion`, and verifies every
+  file against the manifest's sha256. It used to read the unsuffixed (v1) files
+  unchecked, whatever version was wanted.
+- `CIRCUITS_PACKAGE_VERSION` and the `CircuitsManifest` / `CircuitVersions` /
+  `NodeProviderOptions` types are exported.
+
+### Changed
+
+- **The web provider's default is the pinned `@orbinum/circuits` release**
+  (`CIRCUITS_PACKAGE_VERSION`, equal to the dependency) instead of `latest`, so
+  a later publish cannot change what an installed version downloads. Artifacts
+  are fetched next to the manifest, including for a `baseUrl` mirror.
+- A failed manifest fetch is retried on the next call; it used to break the
+  provider instance for good.
+- Manifest artifact file names must be bare names; a manifest pointing outside
+  its directory or release is refused before any read or request.
+- `@orbinum/circuits` 0.14.0 → 0.15.0.
+
+### Removed
+
+- **`CircuitType.ValueProof`** and its circuit id 6: runtime spec 16 claims relay
+  fees without a proof, and `@orbinum/circuits` 0.15.0 no longer ships it.
+- **`CircuitConfig.wasmPath` / `zkeyPath` / `provingKeyPath`**: file names come
+  from the manifest. `CircuitConfig` now has `name`, `version` and
+  `expectedPublicSignals`.
+- `NodeArtifactProvider` no longer looks in `artifacts/` or `pkg/` subfolders:
+  point `packageRoot` at the directory holding `manifest.json`.
+
 ## [7.1.1] - 2026-09-15
 
 ### Fixed

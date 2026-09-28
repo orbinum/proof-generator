@@ -11,14 +11,7 @@
  * valid witness and the tests fail, which is the correct outcome: the inputs are
  * part of the circuit's contract.
  */
-export const CIRCUIT_INPUTS = {
-  value_proof: {
-    commitment: '3643666824345175873030158667894000780795959042794924299189022738150306228273',
-    value: '1000',
-    asset_id: '0',
-    owner_pubkey: '295990755076957304699390954000840642031',
-    blinding: '338769989521388930488183815618068152337',
-  },
+export const CIRCUIT_INPUTS_V1 = {
   unshield: {
     merkle_root: '14208393621753335770025492346046929577284360878008976455860383840052720004891',
     nullifier: '1488218295146882086592806968655647094002237392054888626232339779137708023373',
@@ -173,3 +166,19 @@ export const CIRCUIT_INPUTS = {
     output_blindings: ['12302652056939934532', '6153737369425722316'],
   },
 };
+
+/**
+ * v2 appends `memo_hash`. The circuit only binds it as a public input — any
+ * field element proves — so v2's inputs are v1's plus one.
+ */
+const MEMO_HASH = '1835363695';
+
+export const CIRCUIT_INPUTS_V2 = {
+  unshield: { ...CIRCUIT_INPUTS_V1.unshield, memo_hash: MEMO_HASH },
+  transfer: { ...CIRCUIT_INPUTS_V1.transfer, memo_hash: MEMO_HASH },
+};
+
+/** The inputs for one circuit version. */
+export function inputsFor(circuit: 'unshield' | 'transfer', version: number) {
+  return version === 1 ? CIRCUIT_INPUTS_V1[circuit] : CIRCUIT_INPUTS_V2[circuit];
+}

@@ -1,143 +1,153 @@
 /**
  * Tests: NodeArtifactProvider
  *
- * Tests use a temporary directory with fake artifact files to avoid
- * dependence on the actual @orbinum/circuits package being installed.
+ * Runs against a throwaway package directory (see ./fixture), so the tests do
+ * not depend on the installed @orbinum/circuits.
  */
-
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { NodeArtifactProvider } from '../../src/providers';
 import { CircuitType } from '../../src/circuits/types';
+import { writeCircuitsPackage } from './fixture';
 
-// ─── Temporary artifact directory ────────────────────────────────────────────
-
-let tmpDir: string;
+let root: string;
 
 beforeAll(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbinum-test-'));
-
-  // Create fake artifact files the provider will look for
-  const artifacts = [
-    'unshield.wasm',
-    'unshield_pk.zkey',
-    'unshield_pk.ark',
-    'transfer.wasm',
-    'transfer_pk.zkey',
-    'transfer_pk.ark',
-    'value_proof.wasm',
-    'value_proof_pk.zkey',
-    'value_proof_pk.ark',
-  ];
-  for (const file of artifacts) {
-    fs.writeFileSync(path.join(tmpDir, file), Buffer.from(`fake-${file}`));
-  }
+  root = writeCircuitsPackage().root;
 });
 
 afterAll(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+const text = (bytes: Uint8Array) => Buffer.from(bytes).toString('utf8');
+
+/** A copy of the fixture package with its manifest edited. */
+function withManifest(edit: (manifest: any) => void): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbinum-edited-'));
+  fs.cpSync(root, dir, { recursive: true });
+  const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+  edit(manifest);
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
+  return dir;
+}
 
 describe('NodeArtifactProvider', () => {
-  it('constructs successfully with an explicit packageRoot', () => {
-    expect(() => new NodeArtifactProvider(tmpDir)).not.toThrow();
+  it('serves the manifest active version by default', async () => {
+    const provider = new NodeArtifactProvider({ packageRoot: root });
+    expect(text(await provider.getCircuitWasm(CircuitType.Unshield))).toBe('fake-unshield_v2.wasm');
+    expect(text(await provider.getCircuitZkey(CircuitType.Transfer))).toBe(
+      'fake-transfer_v2_pk.zkey'
+    );
+    expect(text(await provider.getCircuitProvingKey(CircuitType.Transfer))).toBe(
+      'fake-transfer_v2_pk.ark'
+    );
   });
 
-  it('reads WASM file for Unshield circuit', async () => {
-    const provider = new NodeArtifactProvider(tmpDir);
-    const result = await provider.getCircuitWasm(CircuitType.Unshield);
-    expect(result).toBeInstanceOf(Uint8Array);
-    expect(result.length).toBeGreaterThan(0);
+  it('serves a pinned version', async () => {
+    const provider = new NodeArtifactProvider({
+      packageRoot: root,
+      circuitVersions: { unshield: 1 },
+    });
+    expect(text(await provider.getCircuitWasm(CircuitType.Unshield))).toBe('fake-unshield.wasm');
+    // Only the pinned circuit moves.
+    expect(text(await provider.getCircuitWasm(CircuitType.Transfer))).toBe('fake-transfer_v2.wasm');
   });
 
-  it('reads zkey file for Unshield circuit', async () => {
-    const provider = new NodeArtifactProvider(tmpDir);
-    const result = await provider.getCircuitZkey(CircuitType.Unshield);
-    expect(result).toBeInstanceOf(Uint8Array);
-    expect(result.length).toBeGreaterThan(0);
+  it('reports the version it serves', async () => {
+    const provider = new NodeArtifactProvider({
+      packageRoot: root,
+      circuitVersions: { transfer: 1 },
+    });
+    expect(await provider.getResolvedVersion(CircuitType.Transfer)).toEqual({
+      version: 1,
+      packageVersion: '0.15.0',
+      vkHash: `0x${'1'.repeat(64)}`,
+    });
   });
 
-  it('reads WASM file for Transfer circuit', async () => {
-    const provider = new NodeArtifactProvider(tmpDir);
-    const result = await provider.getCircuitWasm(CircuitType.Transfer);
-    expect(result).toBeInstanceOf(Uint8Array);
+  it('still accepts the package root as a bare string', async () => {
+    const provider = new NodeArtifactProvider(root);
+    expect(text(await provider.getCircuitWasm(CircuitType.Unshield))).toBe('fake-unshield_v2.wasm');
   });
 
-  it('reads WASM file for ValueProof circuit', async () => {
-    const provider = new NodeArtifactProvider(tmpDir);
-    const result = await provider.getCircuitWasm(CircuitType.ValueProof);
-    expect(result).toBeInstanceOf(Uint8Array);
-  });
-
-  it('returns content matching the fake file', async () => {
-    const provider = new NodeArtifactProvider(tmpDir);
-    const result = await provider.getCircuitWasm(CircuitType.Unshield);
-    const text = Buffer.from(result as Uint8Array).toString('utf8');
-    expect(text).toBe('fake-unshield.wasm');
-  });
-
-  it('throws when artifact file does not exist', async () => {
-    const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbinum-empty-'));
+  it('refuses a file whose sha256 differs from the manifest', async () => {
+    const dir = withManifest(() => {});
+    fs.writeFileSync(path.join(dir, 'unshield_v2.wasm'), 'tampered');
     try {
-      const provider = new NodeArtifactProvider(emptyDir);
-      await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
-        'Artifact unshield.wasm not found'
-      );
+      await expect(
+        new NodeArtifactProvider(dir).getCircuitWasm(CircuitType.Unshield)
+      ).rejects.toThrow('Integrity check failed');
     } finally {
-      fs.rmSync(emptyDir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('reads .ark proving key for Unshield circuit', async () => {
-    const provider = new NodeArtifactProvider(tmpDir);
-    const result = await provider.getCircuitProvingKey!(CircuitType.Unshield);
-    expect(result).toBeInstanceOf(Uint8Array);
-    expect(result.length).toBeGreaterThan(0);
+  it('refuses a version the manifest does not support', async () => {
+    const provider = new NodeArtifactProvider({
+      packageRoot: root,
+      circuitVersions: { unshield: 3 },
+    });
+    await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
+      'v3 is no longer supported'
+    );
   });
 
-  it('.ark content matches fake file', async () => {
-    const provider = new NodeArtifactProvider(tmpDir);
-    const result = await provider.getCircuitProvingKey!(CircuitType.Unshield);
-    expect(Buffer.from(result).toString('utf8')).toBe('fake-unshield_pk.ark');
-  });
-
-  it('reads .ark proving key for all circuit types', async () => {
-    const provider = new NodeArtifactProvider(tmpDir);
-    const types = [CircuitType.Unshield, CircuitType.Transfer, CircuitType.ValueProof];
-    for (const type of types) {
-      const result = await provider.getCircuitProvingKey!(type);
-      expect(result).toBeInstanceOf(Uint8Array);
-    }
-  });
-
-  it('throws when .ark file does not exist', async () => {
-    // directory has no .ark files
-    const noArkDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbinum-noark-'));
-    fs.writeFileSync(path.join(noArkDir, 'unshield.wasm'), 'fake');
-    fs.writeFileSync(path.join(noArkDir, 'unshield_pk.zkey'), 'fake');
-    try {
-      const provider = new NodeArtifactProvider(noArkDir);
-      await expect(provider.getCircuitProvingKey!(CircuitType.Unshield)).rejects.toThrow(
-        'Artifact unshield_pk.ark not found'
+  it('refuses a malformed version pin', async () => {
+    for (const bad of [0, 1.5, -1]) {
+      const provider = new NodeArtifactProvider({
+        packageRoot: root,
+        circuitVersions: { unshield: bad },
+      });
+      await expect(provider.getResolvedVersion(CircuitType.Unshield)).rejects.toThrow(
+        'invalid version'
       );
-    } finally {
-      fs.rmSync(noArkDir, { recursive: true, force: true });
     }
   });
 
-  it('throws when packageRoot cannot be resolved and no arg given', () => {
-    // If @orbinum/circuits is not installed, construction should throw.
-    // If it IS installed (CI), this test is skipped gracefully.
+  it('refuses a manifest file name that escapes the package', async () => {
+    const dir = withManifest(m => {
+      m.circuits.unshield.versions['2'].artifacts.wasm.file = '../outside.wasm';
+    });
     try {
-      const provider = new NodeArtifactProvider();
-      // If we get here the package is installed — just verify it constructed
-      expect(provider).toBeDefined();
-    } catch (err: any) {
-      expect(err.message).toMatch(/Cannot resolve @orbinum\/circuits/);
+      await expect(
+        new NodeArtifactProvider(dir).getCircuitWasm(CircuitType.Unshield)
+      ).rejects.toThrow('unsafe artifact file name');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('throws when a listed file is missing', async () => {
+    const dir = withManifest(() => {});
+    fs.rmSync(path.join(dir, 'unshield_v2_pk.ark'));
+    try {
+      await expect(
+        new NodeArtifactProvider(dir).getCircuitProvingKey(CircuitType.Unshield)
+      ).rejects.toThrow('Artifact unshield_v2_pk.ark not found');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws when the directory has no manifest', async () => {
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'orbinum-empty-'));
+    try {
+      await expect(
+        new NodeArtifactProvider(empty).getCircuitWasm(CircuitType.Unshield)
+      ).rejects.toThrow('No circuits manifest');
+    } finally {
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it('reads the installed package when no root is given', async () => {
+    // @orbinum/circuits is a dependency, so the default resolves and its manifest
+    // names both circuits.
+    const provider = new NodeArtifactProvider();
+    const { version } = await provider.getResolvedVersion(CircuitType.Transfer);
+    expect(version).toBeGreaterThanOrEqual(1);
   });
 });

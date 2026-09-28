@@ -66,6 +66,7 @@ await generateProof(
 ```typescript
 interface GenerateOptions {
   verbose?:  boolean;                 // Log progress to console (default: false)
+  circuitVersion?: number;           // Circuit version; must match the provider's when it reports one (default: the provider's, else 1)
   provider?: ArtifactProvider;        // Override artifact source (default: auto-detected)
   backend?:  'snarkjs' | 'arkworks'; // Proof backend (default: 'snarkjs')
 }
@@ -107,57 +108,6 @@ console.log(result.publicSignals);
 
 ---
 
-### `generateValueProof(value, ownerPubkey, blinding, assetId, commitment, options?)`
-
-High-level helper for the `ValueProof` circuit. Computes `owner_hash = Poseidon(ownerPubkey)`
-and returns the decoded public signals alongside the proof.
-
-**Parameters:**
-
-```typescript
-await generateValueProof(
-  value: bigint,           // Note value (u64)
-  ownerPubkey: bigint,     // Owner public key (BN254 scalar)
-  blinding: bigint,        // Blinding factor
-  assetId: bigint,         // Asset ID (u32)
-  commitment: bigint,      // Note commitment
-  options?: GenerateOptions
-)
-```
-
-**Returns:** `Promise<ValueProofOutput>`
-
-```typescript
-interface ValueProofOutput {
-  proof: string;           // 128-byte compressed proof (0x-prefixed)
-  publicSignals: string[]; // [commitment, value, asset_id, owner_hash]
-  decoded: {
-    commitment: string;    // 0x-prefixed hex (32 bytes)
-    value: string;         // Decimal string (u64)
-    assetId: number;       // u32
-    ownerHash: string;     // 0x-prefixed hex (32 bytes) — Poseidon(ownerPubkey)
-  };
-}
-```
-
-**Example:**
-
-```typescript
-import { generateValueProof } from '@orbinum/proof-generator';
-
-const result = await generateValueProof(
-  1000n,        // value
-  ownerPubkey,  // bigint
-  blinding,     // bigint
-  42n,          // assetId
-  commitment,   // bigint
-);
-
-console.log(result.decoded.value);     // '1000'
-console.log(result.decoded.assetId);   // 42
-console.log(result.decoded.ownerHash); // '0x...' (always present)
-```
-
 ## Enumerations
 
 ### `CircuitType`
@@ -168,7 +118,6 @@ Supported circuits:
 enum CircuitType {
   Unshield = 'unshield', // Withdrawal to public address
   Transfer = 'transfer', // Private transfer
-  ValueProof = 'value_proof', // Prove note value (commitment binding)
 }
 ```
 
@@ -179,7 +128,6 @@ import { CircuitType } from '@orbinum/proof-generator';
 
 await generateProof(CircuitType.Unshield, inputs);
 await generateProof(CircuitType.Transfer, inputs);
-await generateProof(CircuitType.ValueProof, inputs);
 ```
 
 ## Providers
@@ -191,14 +139,24 @@ By default the library detects the runtime environment and picks the appropriate
 - **Node.js** → `NodeArtifactProvider` (reads from `node_modules/@orbinum/circuits` via `fs`)
 - **Browser / Web Worker** (`window` or `self` defined) → `WebArtifactProvider` (fetches over HTTP)
 
+Both read the `@orbinum/circuits` manifest: it picks each circuit's version (the
+manifest's `active_version` unless pinned) and names its files, and every file is
+checked against the manifest's sha256 before it is used.
+
 ### `NodeArtifactProvider`
 
 ```typescript
 import { NodeArtifactProvider } from '@orbinum/proof-generator';
 
+// The installed @orbinum/circuits, active versions
 const provider = new NodeArtifactProvider();
-// optional: pass a custom path to @orbinum/circuits package root
-const custom = new NodeArtifactProvider('/path/to/circuits');
+
+// A package directory elsewhere, with transfer pinned to v1
+const custom = new NodeArtifactProvider({
+  packageRoot: '/path/to/circuits',
+  circuitVersions: { transfer: 1 },
+});
+// A bare string is still accepted as the package root.
 
 const result = await generateProof(CircuitType.Unshield, inputs, { provider });
 ```
@@ -206,20 +164,33 @@ const result = await generateProof(CircuitType.Unshield, inputs, { provider });
 ### `WebArtifactProvider`
 
 Fetches artifacts over HTTP. Suitable for browsers, React Native, or any environment without a local filesystem.
+By default it reads the `@orbinum/circuits` release this package depends on
+(`CIRCUITS_PACKAGE_VERSION`) from unpkg; `baseUrl` points it at a mirror serving
+`manifest.json` and the artifacts side by side.
 
 ```typescript
 import { WebArtifactProvider } from '@orbinum/proof-generator';
 
 const provider = new WebArtifactProvider({
-  baseUrl: 'https://cdn.example.com/circuits',
-  // optional per-circuit URL overrides:
-  // wasmUrls?: Partial<Record<CircuitType, string>>
-  // zkeyUrls?: Partial<Record<CircuitType, string>>
-  // provingKeyUrls?: Partial<Record<CircuitType, string>>
+  baseUrl: 'https://cdn.example.com/circuits', // optional; pin a version in the URL
+  circuitVersions: { unshield: 1 },            // optional per-circuit version pin
 });
 
 const result = await generateProof(CircuitType.Unshield, inputs, { provider });
 ```
+
+### `getResolvedVersion`
+
+Both providers report the version, package version and on-chain `vk_hash` they
+serve for a circuit — for checking the `vk_hash` against the chain before proving:
+
+```typescript
+const { version, packageVersion, vkHash } = await provider.getResolvedVersion(CircuitType.Transfer);
+```
+
+`generateProof` uses it too: the proof is checked against that version's arity,
+and a `circuitVersion` option that disagrees throws `CircuitVersionMismatchError`
+before any proving.
 
 ### `ArtifactProvider` Interface
 
@@ -230,6 +201,7 @@ interface ArtifactProvider {
   getCircuitWasm(circuitType: CircuitType): Promise<Uint8Array | string>;
   getCircuitZkey(circuitType: CircuitType): Promise<Uint8Array | string>;
   getCircuitProvingKey?(circuitType: CircuitType): Promise<Uint8Array>; // required for arkworks backend
+  getResolvedVersion?(circuitType: CircuitType): Promise<ResolvedCircuitVersion>; // the version served
 }
 ```
 
@@ -243,6 +215,7 @@ import {
   WitnessCalculationError,
   ProofGenerationError,
   CircuitNotFoundError,
+  CircuitVersionMismatchError,
   InvalidInputsError,
 } from '@orbinum/proof-generator';
 ```
@@ -251,6 +224,7 @@ import {
 | --- | --- | --- |
 | `InvalidInputsError` | `INVALID_INPUTS` | Missing or malformed circuit inputs |
 | `CircuitNotFoundError` | `CIRCUIT_NOT_FOUND` | Circuit artifacts not found |
+| `CircuitVersionMismatchError` | `CIRCUIT_VERSION_MISMATCH` | `circuitVersion` differs from the version the provider serves |
 | `WitnessCalculationError` | `WITNESS_CALCULATION_FAILED` | snarkjs witness step fails |
 | `ProofGenerationError` | `PROOF_GENERATION_FAILED` | Backend proof step fails |
 
@@ -274,9 +248,8 @@ try {
 
 | Circuit         | Public Signals | Key Inputs                                                                           | Use Case                                         |
 | --------------- | -------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| **Unshield**    | 5              | `merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, note fields, `path_*` | Withdraw from pool to public address             |
-| **Transfer**    | 5              | `merkle_root`, input/output nullifiers and commitments, note fields, `path_*`        | Private-to-private transfer                      |
-| **ValueProof**  | 4              | `commitment`, `value`, `asset_id`, `owner_hash`, note fields                        | Prove note value without revealing extra state   |
+| **Unshield**    | 7 (v1) / 8 (v2) | `merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, note fields, `path_*`; v2 adds `memo_hash` | Withdraw from pool to public address |
+| **Transfer**    | 7 (v1) / 8 (v2) | `merkle_root`, input/output nullifiers and commitments, note fields, `path_*`; v2 adds `memo_hash` | Private-to-private transfer |
 
 ### Output Format
 
@@ -303,7 +276,6 @@ See [docs/backends.md](backends.md) for a full benchmark analysis.
 | --- | --- | --- |
 | Unshield | ~1.3 s | ~7 s |
 | Transfer | ~4.7 s | ~20 s |
-| ValueProof | ~1.1 s | ~5 s |
 ```
 
 - **snarkjs** — default, fastest, uses `.zkey` proving keys
@@ -409,7 +381,6 @@ Proof generation is compute-intensive. Expected times:
 
 - **Unshield**: ~1.5s
 - **Transfer**: ~3s
-- **ValueProof**: ~0.8s
 
 For faster proofs, ensure:
 
