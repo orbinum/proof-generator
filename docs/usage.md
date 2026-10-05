@@ -64,6 +64,7 @@ See [backends.md](./backends.md) for a full comparison of speed and artifact siz
 |---------|--------------|----------------|----------|
 | Unshield | `CircuitType.Unshield` | 7 (v1) / 8 (v2, `memo_hash`) | Withdraw from pool to public address |
 | Transfer | `CircuitType.Transfer` | 7 (v1) / 8 (v2, `memo_hash`) | Private-to-private transfer |
+| Shield | `CircuitType.Shield` | 3 at every version (`commitment, value, asset_id`) | Deposit bound to its value and asset |
 
 ---
 
@@ -101,7 +102,8 @@ const result = await generateProof(CircuitType.Transfer, inputs, { provider });
 ### Circuit versions
 
 Each provider serves the manifest's `active_version` (v2 for transfer and
-unshield since `@orbinum/circuits` 0.15.0) unless a circuit is pinned:
+unshield since `@orbinum/circuits` 0.15.0, v1 for shield since 0.16.0) unless a
+circuit is pinned:
 
 ```typescript
 const provider = new WebArtifactProvider({

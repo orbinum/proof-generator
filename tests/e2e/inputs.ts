@@ -178,7 +178,17 @@ export const CIRCUIT_INPUTS_V2 = {
   transfer: { ...CIRCUIT_INPUTS_V1.transfer, memo_hash: MEMO_HASH },
 };
 
+/** Shield has one layout at every version: `circuits`' `fixtures/shield.input.json`. */
+export const SHIELD_INPUTS = {
+  commitment: '10645047120834773430868535752517399140137084112028900997078331302495914980713',
+  value: '1000',
+  asset_id: '0',
+  owner_pubkey: '13826375473539183646547341604172954507723723664952082089315229524188628057191',
+  blinding: '18364757930599072545',
+};
+
 /** The inputs for one circuit version. */
-export function inputsFor(circuit: 'unshield' | 'transfer', version: number) {
+export function inputsFor(circuit: 'unshield' | 'transfer' | 'shield', version: number) {
+  if (circuit === 'shield') return SHIELD_INPUTS;
   return version === 1 ? CIRCUIT_INPUTS_V1[circuit] : CIRCUIT_INPUTS_V2[circuit];
 }

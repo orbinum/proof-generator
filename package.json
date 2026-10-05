@@ -1,6 +1,6 @@
 {
   "name": "@orbinum/proof-generator",
-  "version": "8.0.0",
+  "version": "8.1.0",
   "description": "ZK-SNARK proof generator for Orbinum. Combines snarkjs (witness) with arkworks WASM (proof generation) to produce 128-byte Groth16 proofs.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -50,21 +50,31 @@
     "orbinum"
   ],
   "dependencies": {
-    "@orbinum/circuits": "0.15.0",
+    "@orbinum/circuits": "0.16.0",
     "@orbinum/groth16-proofs": "4.1.0",
     "snarkjs": "0.7.6"
   },
   "devDependencies": {
     "@types/node": "25.5.2",
     "@types/snarkjs": "0.7.9",
-    "@vitest/coverage-v8": "4.1.3",
+    "@vitest/coverage-v8": "4.1.11",
     "prettier": "3.8.1",
     "tsup": "8.5.1",
     "typescript": "6.0.2",
-    "vitest": "4.1.3"
+    "vitest": "4.1.11"
   },
   "engines": {
     "node": ">=22.0.0"
   },
-  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be"
+  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be",
+  "pnpm": {
+    "overrides": {
+      "brace-expansion": "^2.1.7",
+      "esbuild": "^0.28.1",
+      "nanoid": "^3.3.18",
+      "postcss": "^8.5.23",
+      "underscore": "^1.13.8",
+      "vite": "^8.0.16"
+    }
+  }
 }

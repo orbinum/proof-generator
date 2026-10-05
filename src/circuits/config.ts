@@ -7,11 +7,21 @@ import { CircuitType, CircuitConfig } from './types';
  * v2 appends `memo_hash` to transfer and unshield, binding the encrypted memos
  * to the proof.
  */
-const PUBLIC_SIGNALS: Record<CircuitType, Record<number, number>> = {
+const PUBLIC_SIGNALS: Partial<Record<CircuitType, Record<number, number>>> = {
   // v1: [merkle_root, nullifier, amount, recipient, asset_id, fee, change_commitment]
   [CircuitType.Unshield]: { 1: 7, 2: 8 },
   // v1: [merkle_root, nullifiers[2], commitments[2], asset_id, fee]
   [CircuitType.Transfer]: { 1: 7, 2: 8 },
+};
+
+/**
+ * Circuits whose arity is the same at every version. The runtime refuses a
+ * shield key of any other arity, so a rotated shield key (a new ceremony) is a
+ * new version this package can prove without an update.
+ */
+const FIXED_PUBLIC_SIGNALS: Partial<Record<CircuitType, number>> = {
+  // [commitment, value, asset_id]
+  [CircuitType.Shield]: 3,
 };
 
 /**
@@ -22,6 +32,13 @@ const PUBLIC_SIGNALS: Record<CircuitType, Record<number, number>> = {
  * arity, since a wrong count would validate a proof against the wrong statement.
  */
 export function getCircuitConfig(circuitType: CircuitType, circuitVersion = 1): CircuitConfig {
+  const fixed = FIXED_PUBLIC_SIGNALS[circuitType];
+  if (fixed !== undefined) {
+    if (!Number.isInteger(circuitVersion) || circuitVersion < 1) {
+      throw new Error(`Unknown version ${circuitVersion} for circuit ${circuitType}`);
+    }
+    return { name: circuitType, version: circuitVersion, expectedPublicSignals: fixed };
+  }
   const byVersion = PUBLIC_SIGNALS[circuitType];
   if (!byVersion) {
     throw new Error(`Unknown circuit type: ${circuitType}`);
