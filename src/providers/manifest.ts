@@ -10,7 +10,7 @@ import type { ResolvedCircuitVersion } from './interface';
  * reads it from the installed dependency; the web provider fetches it from the
  * CDN. Kept equal to the dependency in package.json by a test.
  */
-export const CIRCUITS_PACKAGE_VERSION = '0.15.0';
+export const CIRCUITS_PACKAGE_VERSION = '0.16.0';
 
 export type ArtifactKind = 'wasm' | 'zkey' | 'ark' | 'vk_json' | 'r1cs';
 

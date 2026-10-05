@@ -5,7 +5,7 @@ import { CircuitType, CIRCUIT_ID, circuitTypeToId } from '../../src/circuits/typ
  * Anti-drift guard for the CircuitType → on-chain id mapping.
  *
  * The numeric ids are the node's source of truth
- * (node/frame/zk-verifier/src/types.rs): TRANSFER=1, UNSHIELD=2. Three layers
+ * (node/frame/zk-verifier/src/types.rs): TRANSFER=1, UNSHIELD=2, SHIELD=3. Three layers
  * (node, this package, wallet-sdk) must agree — a wrong id silently queries the
  * wrong circuit's VK/version. Ids are never reused, so retired ones leave
  * permanent gaps.
@@ -13,6 +13,7 @@ import { CircuitType, CIRCUIT_ID, circuitTypeToId } from '../../src/circuits/typ
 const NODE_CIRCUIT_IDS: Record<CircuitType, number> = {
   [CircuitType.Transfer]: 1,
   [CircuitType.Unshield]: 2,
+  [CircuitType.Shield]: 3,
 };
 
 describe('CircuitType → on-chain id mapping', () => {
@@ -29,6 +30,7 @@ describe('CircuitType → on-chain id mapping', () => {
   it('circuitTypeToId resolves each known circuit', () => {
     expect(circuitTypeToId(CircuitType.Transfer)).toBe(1);
     expect(circuitTypeToId(CircuitType.Unshield)).toBe(2);
+    expect(circuitTypeToId(CircuitType.Shield)).toBe(3);
   });
 
   // Ids 5 (private_link) and 6 (value_proof) belong to retired circuits the

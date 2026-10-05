@@ -34,9 +34,12 @@ import { inputsFor } from './inputs';
  * a copy would agree with the source right up until one of them changed, and
  * the test's whole job is to notice that.
  */
-const CASES = [CircuitType.Unshield, CircuitType.Transfer].flatMap(circuit =>
-  [1, 2].map(version => ({ circuit, version }))
-);
+const CASES = [
+  ...([CircuitType.Unshield, CircuitType.Transfer] as const).flatMap(circuit =>
+    [1, 2].map(version => ({ circuit, version }))
+  ),
+  { circuit: CircuitType.Shield, version: 1 },
+];
 
 const strict = Boolean(process.env.PROOF_GENERATOR_REQUIRE_ARTIFACTS);
 

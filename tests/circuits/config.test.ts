@@ -23,6 +23,19 @@ describe('getCircuitConfig', () => {
     expect(getCircuitConfig(CircuitType.Transfer, 2).expectedPublicSignals).toBe(8);
   });
 
+  it('shield: commitment, value and asset_id at every version', () => {
+    expect(getCircuitConfig(CircuitType.Shield, 1)).toEqual({
+      name: 'shield',
+      version: 1,
+      expectedPublicSignals: 3,
+    });
+    // A rotated shield key keeps the layout, so a new version needs no update.
+    expect(getCircuitConfig(CircuitType.Shield, 2).expectedPublicSignals).toBe(3);
+    expect(getCircuitConfig(CircuitType.Shield, 7).expectedPublicSignals).toBe(3);
+    expect(() => getCircuitConfig(CircuitType.Shield, 0)).toThrow('Unknown version 0');
+    expect(() => getCircuitConfig(CircuitType.Shield, 1.5)).toThrow('Unknown version 1.5');
+  });
+
   it('defaults to version 1', () => {
     expect(getCircuitConfig(CircuitType.Transfer)).toEqual(
       getCircuitConfig(CircuitType.Transfer, 1)

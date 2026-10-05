@@ -82,9 +82,11 @@ The first proof call in a process incurs the WASM initialization overhead (~1.5â
 | ----------- | -------- | ------------------------------------ |
 | Unshield    | 1, 2     | Withdraw from pool to public address |
 | Transfer    | 1, 2     | Private-to-private transfer          |
+| Shield      | 1+       | Deposit bound to its value and asset |
 
 v2 (active since `@orbinum/circuits` 0.15.0) binds the encrypted memos to the
-proof through an extra `memo_hash` public input. The providers serve the
+proof through an extra `memo_hash` public input. Shield (since 0.16.0) has one
+layout at every version, so a rotated shield key proves without an update. The providers serve the
 manifest's active version unless a circuit is pinned, and verify every artifact
 against the manifest's sha256; see [docs/usage.md](docs/usage.md#circuit-versions).
 

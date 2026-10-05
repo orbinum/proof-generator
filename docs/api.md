@@ -118,6 +118,7 @@ Supported circuits:
 enum CircuitType {
   Unshield = 'unshield', // Withdrawal to public address
   Transfer = 'transfer', // Private transfer
+  Shield = 'shield', // Deposit bound to its value and asset
 }
 ```
 

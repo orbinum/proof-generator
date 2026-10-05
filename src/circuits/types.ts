@@ -2,19 +2,21 @@
 export enum CircuitType {
   Unshield = 'unshield',
   Transfer = 'transfer',
+  Shield = 'shield',
 }
 
 /**
  * On-chain numeric circuit IDs. Single source of truth for mapping the string
  * CircuitType to the id the pallet verifies against. These MUST match the node's
  * `CircuitId` constants (`node/frame/zk-verifier/src/types.rs`): TRANSFER=1,
- * UNSHIELD=2. Ids are never reused, so retired ones leave permanent gaps. A
+ * UNSHIELD=2, SHIELD=3. Ids are never reused, so retired ones leave permanent gaps. A
  * version/vk lookup keyed off the wrong id would query a non-existent circuit.
  * A drift test guards this.
  */
 export const CIRCUIT_ID: Record<CircuitType, number> = {
   [CircuitType.Transfer]: 1,
   [CircuitType.Unshield]: 2,
+  [CircuitType.Shield]: 3,
 };
 
 /**

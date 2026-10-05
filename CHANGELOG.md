@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [8.1.0] - 2026-10-05
+
+Requires `@orbinum/circuits` 0.16.0 (a dependency), which ships shield v1.
+
+### Added
+
+- `CircuitType.Shield` (on-chain id 3), with 3 public signals
+  (`commitment, value, asset_id`) **at every version**: the runtime refuses a
+  shield key of any other arity, so a rotated shield key proves without an
+  update to this package.
+
+### Changed
+
+- Pins `@orbinum/circuits` 0.16.0.
+
+### Security
+
+- `pnpm audit` is clean. `vitest` and `@vitest/coverage-v8` move to 4.1.11, and
+  `pnpm.overrides` lift the transitive `brace-expansion`, `esbuild`, `nanoid`,
+  `postcss`, `underscore` and `vite` to patched releases. The overrides apply
+  to this repository only: `underscore` reaches consumers through
+  `snarkjs > bfj > jsonpath`, which pins 1.13.6, and only a consumer-side
+  override lifts it there.
+
 ## [8.0.0] - 2026-09-28
 
 **Breaking** — `ValueProof` is removed and `CircuitConfig` loses its file
