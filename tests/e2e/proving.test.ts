@@ -36,7 +36,7 @@ import { inputsFor } from './inputs';
  */
 const CASES = [
   ...([CircuitType.Unshield, CircuitType.Transfer] as const).flatMap(circuit =>
-    [1, 2].map(version => ({ circuit, version }))
+    [1, 2, 3].map(version => ({ circuit, version }))
   ),
   { circuit: CircuitType.Shield, version: 1 },
 ];
@@ -163,18 +163,29 @@ describe('proofs from the published packages', () => {
     });
   }
 
-  it('the provider defaults to the manifest active version (v2)', async () => {
+  it('the provider defaults to the manifest active version (v3)', async () => {
     if (!root) return;
-    const { version } = await new NodeArtifactProvider().getResolvedVersion(CircuitType.Transfer);
-    expect(version).toBe(2);
+    for (const circuit of [CircuitType.Transfer, CircuitType.Unshield]) {
+      const { version } = await new NodeArtifactProvider().getResolvedVersion(circuit);
+      expect(version).toBe(3);
+    }
   });
+
+  it('v2 transfer inputs (one merkle_root) cannot prove against v3 artifacts', async () => {
+    if (!root) return;
+    await expect(
+      generateProof(CircuitType.Transfer, inputsFor(CircuitType.Transfer, 2), {
+        provider: new NodeArtifactProvider(),
+      })
+    ).rejects.toThrow();
+  }, 180_000);
 
   it('v1 inputs cannot prove against v2 artifacts', async () => {
     if (!root) return;
     // A caller that forgot memo_hash fails at the witness, not on-chain.
     await expect(
       generateProof(CircuitType.Unshield, inputsFor(CircuitType.Unshield, 1), {
-        provider: new NodeArtifactProvider(),
+        provider: new NodeArtifactProvider({ circuitVersions: { unshield: 2 } }),
       })
     ).rejects.toThrow();
   }, 180_000);

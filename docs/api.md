@@ -249,8 +249,8 @@ try {
 
 | Circuit         | Public Signals | Key Inputs                                                                           | Use Case                                         |
 | --------------- | -------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| **Unshield**    | 7 (v1) / 8 (v2) | `merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, note fields, `path_*`; v2 adds `memo_hash` | Withdraw from pool to public address |
-| **Transfer**    | 7 (v1) / 8 (v2) | `merkle_root`, input/output nullifiers and commitments, note fields, `path_*`; v2 adds `memo_hash` | Private-to-private transfer |
+| **Unshield**    | 7 (v1) / 8 (v2, v3) | `merkle_root`, `nullifier`, `amount`, `recipient`, `asset_id`, note fields, `path_*`; v2 adds `memo_hash`; v3 requires a canonical `spending_key` | Withdraw from pool to public address |
+| **Transfer**    | 7 (v1) / 8 (v2) / 9 (v3) | `merkle_root`, input/output nullifiers and commitments, note fields, `path_*`; v2 adds `memo_hash`; v3 takes `merkle_roots[2]` (one per input) in place of `merkle_root` and requires canonical `spending_keys` | Private-to-private transfer |
 
 ### Output Format
 

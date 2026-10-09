@@ -273,8 +273,8 @@ describe('generateProof — circuit version', () => {
   it('fails before proving on a version this package has no shape for', async () => {
     const snarkjs = await import('snarkjs');
     await expect(
-      generateProof(CircuitType.Transfer, VALID_INPUTS, { provider: versioned(3) })
-    ).rejects.toThrow('Unknown version 3');
+      generateProof(CircuitType.Transfer, VALID_INPUTS, { provider: versioned(4) })
+    ).rejects.toThrow('Unknown version 4');
     expect(snarkjs.groth16.fullProve).not.toHaveBeenCalled();
   });
 

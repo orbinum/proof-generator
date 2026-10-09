@@ -178,6 +178,17 @@ export const CIRCUIT_INPUTS_V2 = {
   transfer: { ...CIRCUIT_INPUTS_V1.transfer, memo_hash: MEMO_HASH },
 };
 
+/**
+ * v3 requires a canonical spending key (these are). Transfer v3 proves each
+ * input against its own root: both notes here sit in one tree, so the two roots
+ * repeat it. Unshield v3 keeps v2's inputs.
+ */
+const { merkle_root: TRANSFER_ROOT, ...TRANSFER_V2_REST } = CIRCUIT_INPUTS_V2.transfer;
+export const CIRCUIT_INPUTS_V3 = {
+  unshield: CIRCUIT_INPUTS_V2.unshield,
+  transfer: { ...TRANSFER_V2_REST, merkle_roots: [TRANSFER_ROOT, TRANSFER_ROOT] },
+};
+
 /** Shield has one layout at every version: `circuits`' `fixtures/shield.input.json`. */
 export const SHIELD_INPUTS = {
   commitment: '10645047120834773430868535752517399140137084112028900997078331302495914980713',
@@ -190,5 +201,6 @@ export const SHIELD_INPUTS = {
 /** The inputs for one circuit version. */
 export function inputsFor(circuit: 'unshield' | 'transfer' | 'shield', version: number) {
   if (circuit === 'shield') return SHIELD_INPUTS;
-  return version === 1 ? CIRCUIT_INPUTS_V1[circuit] : CIRCUIT_INPUTS_V2[circuit];
+  const byVersion = [CIRCUIT_INPUTS_V1, CIRCUIT_INPUTS_V2, CIRCUIT_INPUTS_V3];
+  return byVersion[version - 1][circuit];
 }

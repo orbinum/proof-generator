@@ -23,6 +23,19 @@ describe('getCircuitConfig', () => {
     expect(getCircuitConfig(CircuitType.Transfer, 2).expectedPublicSignals).toBe(8);
   });
 
+  it('v3: transfer takes one Merkle root per input (9), unshield keeps the v2 layout (8)', () => {
+    expect(getCircuitConfig(CircuitType.Transfer, 3)).toEqual({
+      name: 'transfer',
+      version: 3,
+      expectedPublicSignals: 9,
+    });
+    expect(getCircuitConfig(CircuitType.Unshield, 3)).toEqual({
+      name: 'unshield',
+      version: 3,
+      expectedPublicSignals: 8,
+    });
+  });
+
   it('shield: commitment, value and asset_id at every version', () => {
     expect(getCircuitConfig(CircuitType.Shield, 1)).toEqual({
       name: 'shield',
@@ -43,7 +56,8 @@ describe('getCircuitConfig', () => {
   });
 
   it('rejects an unknown version rather than guessing an arity', () => {
-    expect(() => getCircuitConfig(CircuitType.Unshield, 3)).toThrow('Unknown version 3');
+    expect(() => getCircuitConfig(CircuitType.Unshield, 4)).toThrow('Unknown version 4');
+    expect(() => getCircuitConfig(CircuitType.Transfer, 4)).toThrow('Unknown version 4');
     expect(() => getCircuitConfig(CircuitType.Transfer, 0)).toThrow('Unknown version 0');
   });
 
