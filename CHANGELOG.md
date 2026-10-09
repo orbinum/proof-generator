@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [9.0.0] - 2026-10-09
+
 Requires `@orbinum/circuits` 0.17.1 (a dependency), whose transfer v3 and
 unshield v3 keys come from a release ceremony. Do not use 0.17.0 (development
 ceremony).
