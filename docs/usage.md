@@ -62,8 +62,8 @@ See [backends.md](./backends.md) for a full comparison of speed and artifact siz
 
 | Circuit | `CircuitType` | Public signals | Use case |
 |---------|--------------|----------------|----------|
-| Unshield | `CircuitType.Unshield` | 7 (v1) / 8 (v2, `memo_hash`) | Withdraw from pool to public address |
-| Transfer | `CircuitType.Transfer` | 7 (v1) / 8 (v2, `memo_hash`) | Private-to-private transfer |
+| Unshield | `CircuitType.Unshield` | 7 (v1) / 8 (v2, `memo_hash`; v3, canonical key) | Withdraw from pool to public address |
+| Transfer | `CircuitType.Transfer` | 7 (v1) / 8 (v2, `memo_hash`) / 9 (v3, `merkle_roots[2]`) | Private-to-private transfer |
 | Shield | `CircuitType.Shield` | 3 at every version (`commitment, value, asset_id`) | Deposit bound to its value and asset |
 
 ---
@@ -101,19 +101,20 @@ const result = await generateProof(CircuitType.Transfer, inputs, { provider });
 
 ### Circuit versions
 
-Each provider serves the manifest's `active_version` (v2 for transfer and
-unshield since `@orbinum/circuits` 0.15.0, v1 for shield since 0.16.0) unless a
+Each provider serves the manifest's `active_version` (v3 for transfer and
+unshield since `@orbinum/circuits` 0.17.1, v1 for shield since 0.16.0) unless a
 circuit is pinned:
 
 ```typescript
 const provider = new WebArtifactProvider({
-  circuitVersions: { unshield: 1 }, // v1 unshield artifacts
+  circuitVersions: { unshield: 2 }, // v2 unshield artifacts
 });
 ```
 
 `generateProof` asks the provider which version it serves and checks the proof
 against that version's public-signal count. v2 transfer/unshield take an extra
-`memo_hash` input and emit 8 signals. Passing `circuitVersion` is optional; if
+`memo_hash` input and emit 8 signals; transfer v3 takes two Merkle roots and
+emits 9, unshield v3 keeps 8. Passing `circuitVersion` is optional; if
 given, it must match the provider's version, else `CircuitVersionMismatchError`.
 
 ---

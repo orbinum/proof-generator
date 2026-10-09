@@ -4,14 +4,18 @@ import { CircuitType, CircuitConfig } from './types';
  * Public signals per circuit and version. A version is a published circuit, so
  * its arity is fixed forever; a new layout is a new version.
  *
- * v2 appends `memo_hash` to transfer and unshield, binding the encrypted memos
- * to the proof.
+ * - v2 appends `memo_hash` to transfer and unshield, binding the encrypted memos
+ *   to the proof.
+ * - v3 requires a canonical spending key (one nullifier per note). Transfer v3
+ *   also takes one Merkle root per input (`merkle_roots[0..1]` in place of
+ *   `merkle_root`), so the two notes may come from different trees; unshield v3
+ *   keeps the v2 layout.
  */
 const PUBLIC_SIGNALS: Partial<Record<CircuitType, Record<number, number>>> = {
   // v1: [merkle_root, nullifier, amount, recipient, asset_id, fee, change_commitment]
-  [CircuitType.Unshield]: { 1: 7, 2: 8 },
+  [CircuitType.Unshield]: { 1: 7, 2: 8, 3: 8 },
   // v1: [merkle_root, nullifiers[2], commitments[2], asset_id, fee]
-  [CircuitType.Transfer]: { 1: 7, 2: 8 },
+  [CircuitType.Transfer]: { 1: 7, 2: 8, 3: 9 },
 };
 
 /**

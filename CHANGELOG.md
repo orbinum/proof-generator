@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Requires `@orbinum/circuits` 0.17.1 (a dependency), whose transfer v3 and
+unshield v3 keys come from a release ceremony. Do not use 0.17.0 (development
+ceremony).
+
+### Added
+
+- Transfer v3: one Merkle root per input, so the two notes may come from
+  different trees. 9 public signals.
+- Unshield v3: same 8 public signals as v2.
+- Both v3 circuits require a canonical spending key, so each note has exactly
+  one nullifier.
+
+### Changed
+
+- Pins `@orbinum/circuits` 0.17.1. Its manifest makes transfer v3 and unshield
+  v3 active, so the providers prove v3 by default; pin a circuit to an older
+  version only while the chain has not activated v3.
+
 ## [8.1.0] - 2026-10-05
 
 Requires `@orbinum/circuits` 0.16.0 (a dependency), which ships shield v1.
