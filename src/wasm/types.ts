@@ -21,6 +21,11 @@ export type InitWasmOptions = {
    * policy exists to prevent. Such a host bundles the `.wasm` itself and passes
    * the packaged URL.
    *
+   * Whatever the URL, it must serve the exact `groth16_proofs_bg.wasm` of the
+   * `@orbinum/groth16-proofs` version this package depends on: the bytes are
+   * checked against its sha256 before instantiation, and any other file is
+   * refused.
+   *
    * Ignored under Node, which reads the file from `node_modules` directly.
    */
   wasmUrl?: string;

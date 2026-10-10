@@ -24,6 +24,8 @@ export type {
   ResolvedCircuitVersion,
   CircuitsManifest,
   CircuitVersions,
+  CircuitsPins,
+  CircuitVersionPin,
 } from './providers';
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
