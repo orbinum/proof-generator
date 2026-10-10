@@ -1,11 +1,8 @@
 import { defineConfig } from 'tsup';
-import { createRequire } from 'node:module';
-
-const require_ = createRequire(import.meta.url);
-const { version } = require_('@orbinum/groth16-proofs/package.json') as { version: string };
+import { buildDefines } from './build/pins';
 
 /**
- * Dual ESM + CommonJS, with the wasm version inlined.
+ * Dual ESM + CommonJS, with the wasm version and integrity pins inlined.
  *
  * `main` stays CommonJS because Metro on React Native 0.73 does not enable
  * `exports` resolution by default, so a mobile host reads `main`. The ESM
@@ -13,8 +10,8 @@ const { version } = require_('@orbinum/groth16-proofs/package.json') as { versio
  * at all — as CommonJS-only it could not, and a consumer naming one enum from
  * it pulled snarkjs entire.
  *
- * The version is injected rather than imported: a JSON import needs an import
- * attribute under ESM and throws on load without one.
+ * The constants are injected rather than imported: a JSON import needs an
+ * import attribute under ESM and throws on load without one (see build/pins.ts).
  */
 export default defineConfig({
     entry: ['src/index.ts'],
@@ -22,5 +19,5 @@ export default defineConfig({
     dts: true,
     clean: true,
     sourcemap: true,
-    define: { __GROTH16_VERSION__: JSON.stringify(version) },
+    define: buildDefines(),
 });

@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 // ─── Mock @orbinum/groth16-proofs before importing loader ────────────────────
 
@@ -39,6 +40,12 @@ describe('initWasm', () => {
 });
 
 describe('where the browser loads the wasm from', () => {
+  /** The installed binary: the only bytes whose sha256 matches the pin. */
+  const wasmBytes = new Uint8Array(
+    readFileSync(require.resolve('@orbinum/groth16-proofs/groth16_proofs_bg.wasm'))
+  );
+  let fetchSpy: ReturnType<typeof vi.fn>;
+
   // Each case re-imports the module: `initWasm` caches the instance, and the
   // configured URL lives beside it. Sharing one instance across these would
   // test whichever ran first.
@@ -49,27 +56,37 @@ describe('where the browser loads the wasm from', () => {
     // undefined. Without this they exercise the Node path — which reads the
     // file off disk and never calls the init function these assertions read.
     vi.stubGlobal('self', globalThis);
+    fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => wasmBytes.slice().buffer,
+    });
+    vi.stubGlobal('fetch', fetchSpy);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  /** The URL `__wbg_init` was actually handed. */
-  async function urlPassedTo(
-    configure: (m: typeof import('../../src/wasm/loader')) => void | Promise<void>
+  /** The URL fetched, after checking `__wbg_init` got the verified bytes. */
+  async function urlFetchedBy(
+    configure: (m: typeof import('../../src/wasm/loader')) => void | Promise<void>,
+    run: (m: typeof import('../../src/wasm/loader')) => Promise<unknown> = m => m.initWasm()
   ): Promise<unknown> {
     const wasm = await import('@orbinum/groth16-proofs');
     const init = wasm.default as unknown as ReturnType<typeof vi.fn>;
     init.mockClear();
     const loader = await import('../../src/wasm/loader');
     await configure(loader);
-    await loader.initWasm();
-    return (init.mock.calls[0]?.[0] as { module_or_path?: unknown })?.module_or_path;
+    await run(loader);
+    expect((init.mock.calls[0]?.[0] as { module_or_path?: unknown })?.module_or_path).toEqual(
+      wasmBytes
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    return fetchSpy.mock.calls[0][0];
   }
 
   it('defaults to the pinned CDN', async () => {
-    expect(await urlPassedTo(() => {})).toMatch(/^https:\/\/unpkg\.com\//);
+    expect(await urlFetchedBy(() => {})).toMatch(/^https:\/\/unpkg\.com\//);
   });
 
   it('uses the URL a host configured', async () => {
@@ -78,17 +95,30 @@ describe('where the browser loads the wasm from', () => {
     // its prover from a third party at spend time is what that policy exists to
     // prevent. Such a host bundles the .wasm and names it here.
     const local = 'chrome-extension://abc/groth16_proofs_bg.wasm';
-    expect(await urlPassedTo(m => m.setWasmUrl(local))).toBe(local);
+    expect(await urlFetchedBy(m => m.setWasmUrl(local))).toBe(local);
   });
 
   it('accepts the URL through initWasm too', async () => {
     const local = '/assets/groth16_proofs_bg.wasm';
+    expect(
+      await urlFetchedBy(
+        () => {},
+        m => m.initWasm({ wasmUrl: local })
+      )
+    ).toBe(local);
+  });
+
+  it('refuses a host URL that serves a different binary', async () => {
+    // The configured URL is trusted for location only: its bytes must still be
+    // the pinned build.
+    fetchSpy.mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
     const wasm = await import('@orbinum/groth16-proofs');
     const init = wasm.default as unknown as ReturnType<typeof vi.fn>;
     init.mockClear();
     const loader = await import('../../src/wasm/loader');
-    await loader.initWasm({ wasmUrl: local });
-    expect((init.mock.calls[0]?.[0] as { module_or_path?: unknown })?.module_or_path).toBe(local);
+    loader.setWasmUrl('/assets/groth16_proofs_bg.wasm');
+    await expect(loader.initWasm()).rejects.toThrow(/Integrity check failed/);
+    expect(init).not.toHaveBeenCalled();
   });
 
   it('survives a lazy init, which is the path with nowhere to pass options', async () => {
@@ -97,23 +127,21 @@ describe('where the browser loads the wasm from', () => {
     // call that set it, a host that never calls `initWasm` explicitly — the
     // ordinary case — would silently get the CDN back.
     const local = 'chrome-extension://abc/groth16_proofs_bg.wasm';
-    const wasm = await import('@orbinum/groth16-proofs');
-    const init = wasm.default as unknown as ReturnType<typeof vi.fn>;
-    init.mockClear();
-    const loader = await import('../../src/wasm/loader');
-
-    loader.setWasmUrl(local);
-    await loader.compressSnarkjsProofWasm({
-      pi_a: ['1', '2', '1'],
-      pi_b: [
-        ['3', '4'],
-        ['5', '6'],
-        ['1', '0'],
-      ],
-      pi_c: ['7', '8', '1'],
-    });
-
-    expect((init.mock.calls[0]?.[0] as { module_or_path?: unknown })?.module_or_path).toBe(local);
+    expect(
+      await urlFetchedBy(
+        m => m.setWasmUrl(local),
+        m =>
+          m.compressSnarkjsProofWasm({
+            pi_a: ['1', '2', '1'],
+            pi_b: [
+              ['3', '4'],
+              ['5', '6'],
+              ['1', '0'],
+            ],
+            pi_c: ['7', '8', '1'],
+          })
+      )
+    ).toBe(local);
   });
 });
 

@@ -2,11 +2,20 @@
  * Tests: WebArtifactProvider
  *
  * Fetches manifest.json from the pinned CDN release (or a `baseUrl` mirror) and
- * resolves versioned artifact URLs, served next to the manifest, from it.
+ * resolves versioned artifact URLs, served next to the manifest, from it. The
+ * vk_hash and every sha256 come from the build-time pins, never the manifest.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { WebArtifactProvider, CIRCUITS_PACKAGE_VERSION } from '../../src/providers';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import {
+  WebArtifactProvider,
+  CIRCUITS_PACKAGE_VERSION,
+  type CircuitsPins,
+  type WebProviderOptions,
+} from '../../src/providers';
 import { CircuitType } from '../../src/circuits/types';
 
 // ─── Shared mock manifest ─────────────────────────────────────────────────────
@@ -82,6 +91,29 @@ function buildMockManifest(overrides?: {
   };
 }
 
+type MockManifest = ReturnType<typeof buildMockManifest>;
+
+/** Pins that agree with a manifest: what a build against it would embed. */
+function pinsFrom(manifest: MockManifest): CircuitsPins {
+  const pins: CircuitsPins = {};
+  for (const [circuit, { versions }] of Object.entries(manifest.circuits)) {
+    pins[circuit] = {};
+    for (const [version, { vk_hash, artifacts }] of Object.entries(versions)) {
+      const sha256 = Object.fromEntries(
+        Object.entries(artifacts).map(([kind, entry]) => [kind, entry.sha256])
+      );
+      pins[circuit][version] = { vk_hash, sha256 };
+    }
+  }
+  return pins;
+}
+
+const MOCK_PINS = pinsFrom(buildMockManifest());
+
+/** A provider pinned to the mock manifest. */
+const web = (options: WebProviderOptions = {}) =>
+  new WebArtifactProvider({ pins: MOCK_PINS, ...options });
+
 function mockManifestThenArtifact() {
   vi.stubGlobal(
     'fetch',
@@ -102,7 +134,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
   it('fetches the pinned release manifest, then the WASM next to it', async () => {
     mockManifestThenArtifact();
 
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await provider.getCircuitWasm(CircuitType.Unshield);
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -117,7 +149,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
   it('serves the zkey from the pinned release', async () => {
     mockManifestThenArtifact();
 
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await provider.getCircuitZkey(CircuitType.Transfer);
 
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe(
@@ -134,7 +166,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
         .mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
     );
 
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await provider.getCircuitWasm(CircuitType.Unshield);
     await provider.getCircuitZkey(CircuitType.Unshield);
 
@@ -150,7 +182,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
         .mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
     );
 
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await Promise.all([
       provider.getCircuitWasm(CircuitType.Unshield),
       provider.getCircuitZkey(CircuitType.Unshield),
@@ -175,7 +207,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
         .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
     );
 
-    const provider = new WebArtifactProvider({ circuitVersions: { unshield: 1 } });
+    const provider = web({ circuitVersions: { unshield: 1 } });
     await provider.getCircuitWasm(CircuitType.Unshield);
 
     const artifactUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0];
@@ -192,7 +224,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
       })
     );
 
-    const provider = new WebArtifactProvider({ circuitVersions: { unshield: 1 } });
+    const provider = web({ circuitVersions: { unshield: 1 } });
     await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
       'no longer supported'
     );
@@ -201,7 +233,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
   it('throws when manifest fetch fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, status: 503 }));
 
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
       'Failed to fetch circuits manifest'
     );
@@ -217,7 +249,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
         .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
     );
 
-    const provider = new WebArtifactProvider({ baseUrl: mirror });
+    const provider = web({ baseUrl: mirror });
     await provider.getCircuitWasm(CircuitType.Unshield);
 
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(
@@ -237,7 +269,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
         .mockResolvedValueOnce({ ok: false, status: 404 })
     );
 
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
       'Failed to fetch circuit artifact'
     );
@@ -252,7 +284,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
         .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
     );
 
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await provider.getCircuitProvingKey!(CircuitType.Unshield);
 
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe(
@@ -268,7 +300,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
       vi.fn().mockResolvedValue({ ok: true, json: async () => buildMockManifest() })
     );
 
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await expect(provider.getCircuitProvingKey!(CircuitType.Transfer)).rejects.toThrow(
       /no "ark" artifact/
     );
@@ -283,7 +315,7 @@ describe('WebArtifactProvider — manifest resolution', () => {
         .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
     );
 
-    const provider = new WebArtifactProvider();
+    const provider = web();
     const result = await provider.getCircuitProvingKey!(CircuitType.Unshield);
     expect(result).toBeInstanceOf(Uint8Array);
   });
@@ -296,14 +328,14 @@ describe('WebArtifactProvider — integrity + resolved version', () => {
     vi.unstubAllGlobals();
   });
 
-  it('verifies downloaded bytes against the manifest sha256 (passes on match)', async () => {
-    mockManifestThenArtifact(); // artifact = 8 zero bytes, manifest sha256 = ZERO8_SHA
-    const provider = new WebArtifactProvider();
+  it('verifies downloaded bytes against the pinned sha256 (passes on match)', async () => {
+    mockManifestThenArtifact(); // artifact = 8 zero bytes, pinned sha256 = ZERO8_SHA
+    const provider = web();
     await expect(provider.getCircuitWasm(CircuitType.Unshield)).resolves.toBeInstanceOf(Uint8Array);
   });
 
   it('throws on a sha256 mismatch (tampered/stale CDN) and returns no bytes', async () => {
-    // Manifest declares ZERO8_SHA, but the artifact fetch returns different bytes.
+    // Manifest and pin declare ZERO8_SHA, but the artifact fetch returns different bytes.
     vi.stubGlobal(
       'fetch',
       vi
@@ -311,7 +343,7 @@ describe('WebArtifactProvider — integrity + resolved version', () => {
         .mockResolvedValueOnce({ ok: true, json: async () => buildMockManifest() })
         .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(16) })
     );
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
       /Integrity check failed/
     );
@@ -322,7 +354,7 @@ describe('WebArtifactProvider — integrity + resolved version', () => {
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, json: async () => buildMockManifest() })
     );
-    const provider = new WebArtifactProvider();
+    const provider = web();
     const resolved = await provider.getResolvedVersion(CircuitType.Unshield);
     expect(resolved).toEqual({
       version: 1,
@@ -339,7 +371,7 @@ describe('WebArtifactProvider — integrity + resolved version', () => {
         json: async () => buildMockManifest({ supportedVersions: [1, 2] }),
       })
     );
-    const provider = new WebArtifactProvider({ circuitVersions: { unshield: 2 } });
+    const provider = web({ circuitVersions: { unshield: 2 } });
     const resolved = await provider.getResolvedVersion(CircuitType.Unshield);
     expect(resolved.version).toBe(2);
     expect(resolved.vkHash).toBe('0xdeadbeef');
@@ -350,7 +382,7 @@ describe('WebArtifactProvider — integrity + resolved version', () => {
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, json: async () => buildMockManifest() })
     );
-    const provider = new WebArtifactProvider({ circuitVersions: { unshield: 2 } }); // supported: [1]
+    const provider = web({ circuitVersions: { unshield: 2 } }); // supported: [1]
     await expect(provider.getResolvedVersion(CircuitType.Unshield)).rejects.toThrow(
       /no longer supported/
     );
@@ -364,7 +396,7 @@ describe('WebArtifactProvider — integrity + resolved version', () => {
         .mockResolvedValueOnce({ ok: false, status: 503 })
         .mockResolvedValueOnce({ ok: true, json: async () => buildMockManifest() })
     );
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await expect(provider.getResolvedVersion(CircuitType.Unshield)).rejects.toThrow('503');
     await expect(provider.getResolvedVersion(CircuitType.Unshield)).resolves.toMatchObject({
       version: 1,
@@ -375,11 +407,171 @@ describe('WebArtifactProvider — integrity + resolved version', () => {
     const manifest = buildMockManifest();
     manifest.circuits.unshield.versions['1'].artifacts.wasm.file = '../evil.wasm';
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => manifest }));
-    const provider = new WebArtifactProvider();
+    const provider = web();
     await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
       'unsafe artifact file name'
     );
     // Refused before any artifact request.
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Build-time pins ──────────────────────────────────────────────────────────
+
+const ZERO16_SHA = createHash('sha256').update(new Uint8Array(16)).digest('hex');
+
+describe('WebArtifactProvider — build-time pins', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('refuses a tampered artifact served with a self-consistent manifest', async () => {
+    // A hostile mirror rewrites the manifest so its sha256 matches the bytes it
+    // serves, and keeps the vk_hash the chain expects. Only the pin catches it.
+    const manifest = buildMockManifest();
+    manifest.circuits.unshield.versions['1'].artifacts.wasm.sha256 = ZERO16_SHA;
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => manifest })
+        .mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(16) })
+    );
+    await expect(web().getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
+      /manifest sha256 for "wasm" does not match the pinned/
+    );
+    // Refused before any artifact request.
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks the bytes against the pin even when the manifest agrees with it', async () => {
+    // The manifest is untouched; only the served bytes differ. The expected
+    // hash is the pin's, so the result is the same whatever the manifest says.
+    const pins = pinsFrom(buildMockManifest());
+    pins.unshield['1'].sha256.wasm = ZERO16_SHA;
+    const manifest = buildMockManifest();
+    manifest.circuits.unshield.versions['1'].artifacts.wasm.sha256 = ZERO16_SHA;
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => manifest })
+        .mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
+    );
+    await expect(web({ pins }).getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(
+      `expected sha256 ${ZERO16_SHA}`
+    );
+  });
+
+  it('refuses a manifest whose vk_hash differs from the pin', async () => {
+    const manifest = buildMockManifest();
+    manifest.circuits.unshield.versions['1'].vk_hash = '0xfeedface';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => manifest }));
+    const provider = web();
+    await expect(provider.getResolvedVersion(CircuitType.Unshield)).rejects.toThrow(
+      /manifest vk_hash 0xfeedface does not match the pinned 0x73401aa0/
+    );
+    await expect(provider.getCircuitZkey(CircuitType.Unshield)).rejects.toThrow(
+      /does not match the pinned/
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports the pinned vk_hash', async () => {
+    const pins = pinsFrom(buildMockManifest());
+    pins.unshield['1'].vk_hash = '0x73401AA0';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => buildMockManifest() })
+    );
+    const resolved = await web({ pins }).getResolvedVersion(CircuitType.Unshield);
+    expect(resolved.vkHash).toBe('0x73401AA0');
+  });
+
+  it('refuses a version the build has no pin for', async () => {
+    // The manifest makes v2 active; this build only knows v1.
+    const pins = pinsFrom(buildMockManifest());
+    delete pins.unshield['2'];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () =>
+          buildMockManifest({ unshieldActiveVersion: 2, supportedVersions: [1, 2] }),
+      })
+    );
+    const provider = web({ pins });
+    await expect(provider.getResolvedVersion(CircuitType.Unshield)).rejects.toThrow(
+      /v2 is not pinned/
+    );
+    await expect(provider.getCircuitWasm(CircuitType.Unshield)).rejects.toThrow(/not pinned/);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    // A pinned version still resolves.
+    await expect(
+      web({ pins, circuitVersions: { unshield: 1 } }).getResolvedVersion(CircuitType.Unshield)
+    ).resolves.toMatchObject({ version: 1, vkHash: '0x73401aa0' });
+  });
+
+  it('refuses a circuit the build has no pin for', async () => {
+    const pins = pinsFrom(buildMockManifest());
+    delete pins.transfer;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => buildMockManifest() })
+    );
+    await expect(web({ pins }).getResolvedVersion(CircuitType.Transfer)).rejects.toThrow(
+      /not pinned/
+    );
+  });
+
+  it('refuses an artifact kind with no pinned sha256', async () => {
+    const pins = pinsFrom(buildMockManifest());
+    delete pins.unshield['1'].sha256.ark;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => buildMockManifest() })
+    );
+    await expect(web({ pins }).getCircuitProvingKey(CircuitType.Unshield)).rejects.toThrow(
+      /no pinned sha256 for the "ark" artifact/
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  describe('with the embedded pins', () => {
+    const root = dirname(require.resolve('@orbinum/circuits/manifest.json'));
+    const installed = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
+
+    it('serves the installed release', async () => {
+      const circuit = installed.circuits.shield;
+      const entry = circuit.versions[String(circuit.active_version)];
+      const bytes = readFileSync(join(root, entry.artifacts.wasm.file));
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce({ ok: true, json: async () => installed })
+          .mockResolvedValueOnce({
+            ok: true,
+            arrayBuffer: async () =>
+              bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+          })
+      );
+      const provider = new WebArtifactProvider();
+      await expect(provider.getResolvedVersion(CircuitType.Shield)).resolves.toMatchObject({
+        version: circuit.active_version,
+        vkHash: entry.vk_hash,
+      });
+      await expect(provider.getCircuitWasm(CircuitType.Shield)).resolves.toBeInstanceOf(Uint8Array);
+    });
+
+    it('refuses a manifest that disagrees with them', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({ ok: true, json: async () => buildMockManifest() })
+      );
+      await expect(
+        new WebArtifactProvider().getResolvedVersion(CircuitType.Unshield)
+      ).rejects.toThrow(/does not match the pinned|not pinned/);
+    });
   });
 });

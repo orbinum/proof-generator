@@ -180,4 +180,33 @@ describe.skipIf(!built)('the built package', () => {
       expect(source, `dist/${file} lost the inlined version`).toContain(version);
     }
   });
+  it('inlines the integrity pins rather than importing a manifest', () => {
+    // The browser checks the groth16 wasm and every circuit artifact against
+    // hashes fixed at build time. A JSON import would throw under ESM, and
+    // reading the circuits manifest at runtime would trust the very source the
+    // pins exist to check.
+    const { createHash } = require('node:crypto');
+    const wasm = readFileSync(require.resolve('@orbinum/groth16-proofs/groth16_proofs_bg.wasm'));
+    const wasmSha = createHash('sha256').update(wasm).digest('hex');
+    const manifest = JSON.parse(
+      readFileSync(require.resolve('@orbinum/circuits/manifest.json'), 'utf8')
+    );
+    const circuitHashes = Object.values<any>(manifest.circuits).flatMap(({ versions }) =>
+      Object.values<any>(versions).flatMap(v => [
+        v.vk_hash,
+        ...Object.values<any>(v.artifacts).map(a => a.sha256),
+      ])
+    );
+
+    for (const file of ['index.js', 'index.mjs']) {
+      const source = readFileSync(join(DIST, file), 'utf8');
+      expect(source, `dist/${file} lost the wasm sha256`).toContain(wasmSha);
+      for (const hash of circuitHashes) {
+        expect(source, `dist/${file} lost the pin ${hash}`).toContain(hash);
+      }
+      expect(source, `dist/${file} imports the circuits manifest`).not.toMatch(
+        /@orbinum\/circuits\/manifest\.json/
+      );
+    }
+  });
 });

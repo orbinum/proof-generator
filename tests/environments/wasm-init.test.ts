@@ -5,7 +5,8 @@
  * entry point on each side, with a differently-named argument key:
  *
  *   initSync({ module })            — Node, synchronous, from a file buffer
- *   __wbg_init({ module_or_path })  — browser, async, from a URL
+ *   __wbg_init({ module_or_path })  — browser, async, from fetched and
+ *                                     sha256-verified bytes
  *
  * Getting the key wrong is not an error. wasm-bindgen destructures the object,
  * reads `undefined`, and falls back to fetching `groth16_proofs_bg.wasm`
@@ -14,6 +15,22 @@
  * why these assert the exact shape rather than merely that a call happened.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+
+/** The installed binary: the only bytes whose sha256 matches the pin. */
+const WASM_BYTES = new Uint8Array(
+  readFileSync(require.resolve('@orbinum/groth16-proofs/groth16_proofs_bg.wasm'))
+);
+
+/** Stubs `fetch` to serve `bytes` for any URL. */
+function serveWasm(bytes: Uint8Array = WASM_BYTES) {
+  const fetchSpy = vi.fn().mockResolvedValue({
+    ok: true,
+    arrayBuffer: async () => bytes.slice().buffer,
+  });
+  vi.stubGlobal('fetch', fetchSpy);
+  return fetchSpy;
+}
 
 const initSync = vi.fn();
 const asyncInit = vi.fn().mockResolvedValue(undefined);
@@ -109,12 +126,15 @@ describe('WASM initialisation per environment', () => {
   });
 
   describe('browser (window defined)', () => {
+    let fetchSpy: ReturnType<typeof vi.fn>;
+
     beforeEach(() => {
       vi.stubGlobal('window', {});
       vi.stubGlobal('self', {});
+      fetchSpy = serveWasm();
     });
 
-    it('initialises asynchronously from a URL', async () => {
+    it('initialises asynchronously from fetched bytes', async () => {
       const { initWasm } = await freshLoader();
       await initWasm();
 
@@ -122,15 +142,21 @@ describe('WASM initialisation per environment', () => {
       expect(initSync).not.toHaveBeenCalled();
     });
 
-    it('passes a CDN URL under the key the async entry point destructures', async () => {
+    it('fetches the CDN URL and passes the bytes under the key the async entry point destructures', async () => {
+      // Bytes, not the URL: handed a URL, wasm-bindgen would fetch and
+      // instantiate whatever the server returned, unchecked.
       const { initWasm } = await freshLoader();
       await initWasm();
 
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).toMatch(/^https:\/\/unpkg\.com\/@orbinum\/groth16-proofs@/);
+      expect(url).toMatch(/groth16_proofs_bg\.wasm$/);
+
       const arg = asyncInit.mock.calls[0][0];
       expect(arg).toHaveProperty('module_or_path');
-      expect(typeof arg.module_or_path).toBe('string');
-      expect(arg.module_or_path).toMatch(/^https:\/\/unpkg\.com\/@orbinum\/groth16-proofs@/);
-      expect(arg.module_or_path).toMatch(/groth16_proofs_bg\.wasm$/);
+      expect(arg.module_or_path).toBeInstanceOf(Uint8Array);
+      expect(arg.module_or_path).toEqual(WASM_BYTES);
     });
 
     it('pins the URL to the installed version rather than latest', async () => {
@@ -140,7 +166,31 @@ describe('WASM initialisation per environment', () => {
       const { initWasm } = await freshLoader();
       await initWasm();
 
-      expect(asyncInit.mock.calls[0][0].module_or_path).toContain(`@${version}/`);
+      expect(fetchSpy.mock.calls[0][0]).toContain(`@${version}/`);
+    });
+
+    it('refuses bytes that do not match the pinned sha256', async () => {
+      // A tampered CDN or mirror. Nothing is instantiated, and the cache stays
+      // empty so a later call fetches again.
+      const tampered = WASM_BYTES.slice();
+      tampered[tampered.length - 1] ^= 0xff;
+      serveWasm(tampered);
+
+      const { initWasm } = await freshLoader();
+      await expect(initWasm()).rejects.toThrow(/Integrity check failed/);
+      expect(asyncInit).not.toHaveBeenCalled();
+
+      serveWasm();
+      await expect(initWasm()).resolves.toBeUndefined();
+      expect(asyncInit).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses a failed fetch', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+
+      const { initWasm } = await freshLoader();
+      await expect(initWasm()).rejects.toThrow(/Failed to fetch WASM: .* \(404\)/);
+      expect(asyncInit).not.toHaveBeenCalled();
     });
 
     it('never reaches for fs', async () => {
@@ -157,6 +207,7 @@ describe('WASM initialisation per environment', () => {
       // responsive. A worker has `self` but no `window`.
       vi.stubGlobal('window', undefined);
       vi.stubGlobal('self', {});
+      serveWasm();
 
       const { initWasm } = await freshLoader();
       await initWasm();

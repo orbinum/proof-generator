@@ -17,6 +17,13 @@
 // which an `exports` map without a `"./package.json"` entry would break.
 declare const __GROTH16_VERSION__: string;
 
+// sha256 of that version's `groth16_proofs_bg.wasm`, inlined the same way (see
+// build/pins.ts). The browser refuses any binary that does not match it.
+declare const __GROTH16_WASM_SHA256__: string;
+
+/** The sha256 every wasm loaded from a URL must have. */
+export const GROTH16_WASM_SHA256 = __GROTH16_WASM_SHA256__;
+
 // CDN URL for the WASM binary, pinned to the exact version this package was
 // built against. `__GROTH16_VERSION__` is substituted by tsup (see
 // tsup.config.ts) and by the vitest configs, which read the same manifest — an
@@ -37,6 +44,11 @@ let configuredWasmUrl: string | undefined;
 
 /**
  * Sets where the WASM is loaded from, for this module's lifetime.
+ *
+ * The URL must serve the exact `groth16_proofs_bg.wasm` of the
+ * `@orbinum/groth16-proofs` version this package depends on: the bytes are
+ * checked against its sha256 before instantiation, and any other file is
+ * refused.
  *
  * Call at startup. Separate from `initWasm` so a host can state the policy
  * without also forcing instantiation — an extension registers this next to the

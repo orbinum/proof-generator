@@ -3,11 +3,12 @@
  *
  * Two environments, two wasm-bindgen entry points taking differently-named
  * argument keys — `initSync({ module })` from a file buffer under Node,
- * `__wbg_init({ module_or_path })` from a URL in a browser.
+ * `__wbg_init({ module_or_path })` from verified bytes in a browser.
  */
 
 import { getNodeRequire } from '../internal/nodeRequire';
-import { resolveWasmUrl, setWasmUrl } from './source';
+import { verifySha256 } from '../utils/integrity';
+import { GROTH16_WASM_SHA256, resolveWasmUrl, setWasmUrl } from './source';
 import type { InitWasmOptions } from './types';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,7 +59,7 @@ async function initFromDisk(wasm: WasmModule): Promise<void> {
  */
 function resolveInitFn(
   wasm: WasmModule
-): ((input: { module_or_path: string }) => Promise<unknown>) | undefined {
+): ((input: { module_or_path: Uint8Array }) => Promise<unknown>) | undefined {
   const defaultExport = wasm.default;
   if (typeof defaultExport === 'function') return defaultExport;
   if (typeof defaultExport?.default === 'function') return defaultExport.default;
@@ -66,8 +67,13 @@ function resolveInitFn(
 }
 
 /**
- * Browser: pass a URL directly to the init function — the host's when one was
- * configured, the pinned CDN otherwise.
+ * Browser: fetch the binary — from the host's URL when one was configured, the
+ * pinned CDN otherwise — verify it against the pinned sha256, and instantiate
+ * from the bytes.
+ *
+ * Fetched here rather than handed to wasm-bindgen as a URL, which would
+ * instantiate whatever the server returned. The CDN or a host's mirror is not
+ * trusted for executable code; the hash inlined at build time is.
  *
  * Relying on `new URL('groth16_proofs_bg.wasm', import.meta.url)` (the
  * wasm-pack default) breaks in Vite dev mode because the bundler moves the JS
@@ -78,7 +84,18 @@ function resolveInitFn(
  */
 async function initFromUrl(wasm: WasmModule): Promise<void> {
   const initFn = resolveInitFn(wasm);
-  if (initFn) await initFn({ module_or_path: resolveWasmUrl() });
+  if (!initFn) return;
+  const url = resolveWasmUrl();
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch WASM: ${url} (${response.status})`);
+  }
+  const bytes = await verifySha256(
+    new Uint8Array(await response.arrayBuffer()),
+    GROTH16_WASM_SHA256,
+    url
+  );
+  await initFn({ module_or_path: bytes });
 }
 
 /**

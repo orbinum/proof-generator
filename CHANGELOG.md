@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [9.1.0] - 2026-10-10
+
+The groth16 wasm and every circuit artifact a browser downloads are verified
+against hashes pinned at build time, so a CDN or mirror can no longer swap the
+prover's code or keys.
+
+### Security
+
+- Browsers and workers verify the groth16 wasm before instantiating it: the
+  binary is fetched from the CDN (or the `setWasmUrl` / `wasmUrl` override),
+  checked against a sha256 embedded at build time, and instantiated from the
+  verified bytes. A URL set with `setWasmUrl` must serve the exact
+  `groth16_proofs_bg.wasm` of the pinned `@orbinum/groth16-proofs`; any other
+  binary is refused.
+- `WebArtifactProvider` no longer trusts the fetched `manifest.json` for
+  integrity. Every artifact is verified against the sha256 pinned at build time
+  from `@orbinum/circuits`, and `getResolvedVersion` reports the pinned
+  `vk_hash`. A version with no pin, or a manifest whose `vk_hash` or sha256
+  disagrees with its pin, throws. Previously a CDN or mirror could serve any
+  artifact with a matching manifest that claimed the chain's `vk_hash`.
+- New `pins` option on `WebArtifactProvider` (defaults to the embedded pins);
+  types `CircuitsPins` and `CircuitVersionPin` are exported.
+
 ## [9.0.0] - 2026-10-09
 
 Requires `@orbinum/circuits` 0.17.1 (a dependency), whose transfer v3 and
