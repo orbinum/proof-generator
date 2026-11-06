@@ -175,6 +175,7 @@ import { WebArtifactProvider } from '@orbinum/proof-generator';
 const provider = new WebArtifactProvider({
   baseUrl: 'https://cdn.example.com/circuits', // optional; pin a version in the URL
   circuitVersions: { unshield: 1 },            // optional per-circuit version pin
+  fetchTimeoutMs: 300_000,                     // optional; abort a stalled download after this many ms (default)
 });
 
 const result = await generateProof(CircuitType.Unshield, inputs, { provider });

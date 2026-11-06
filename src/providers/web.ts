@@ -13,6 +13,9 @@ import {
 } from './manifest';
 import { CIRCUITS_PINS, type CircuitVersionPin, type CircuitsPins } from './pins';
 
+/** Hard deadline for one download (headers and body). */
+const DEFAULT_FETCH_TIMEOUT_MS = 300_000;
+
 /** The pinned release on the npm CDN. */
 const DEFAULT_BASE_URL = `https://unpkg.com/@orbinum/circuits@${CIRCUITS_PACKAGE_VERSION}`;
 
@@ -37,6 +40,13 @@ export type WebProviderOptions = {
    * override only for tests.
    */
   pins?: CircuitsPins;
+  /**
+   * Abort a manifest or artifact download that has not finished after this many
+   * milliseconds, response body included. Without a limit a stalled request never
+   * settles: the caller waits forever and, for the manifest, so does every later
+   * call, because the pending promise is what gets reused. Defaults to 300 000.
+   */
+  fetchTimeoutMs?: number;
 };
 
 /**
@@ -53,6 +63,7 @@ export class WebArtifactProvider implements ArtifactProvider {
   private readonly baseUrl: string;
   private readonly circuitVersions: CircuitVersions;
   private readonly pins: CircuitsPins;
+  private readonly fetchTimeoutMs: number;
   private manifestPromise: Promise<CircuitsManifest> | null = null;
 
   constructor(options?: WebProviderOptions) {
@@ -60,17 +71,45 @@ export class WebArtifactProvider implements ArtifactProvider {
     this.baseUrl = base || DEFAULT_BASE_URL;
     this.circuitVersions = options?.circuitVersions ?? {};
     this.pins = options?.pins ?? CIRCUITS_PINS;
+    this.fetchTimeoutMs = options?.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+  }
+
+  /**
+   * GET with one deadline covering the request and the body read, so a stalled
+   * download rejects instead of hanging. HTTP errors keep their original message.
+   */
+  private async download<T>(
+    url: string,
+    what: string,
+    read: (response: Response) => Promise<T>
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.fetchTimeoutMs);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${what}: ${url} (${response.status})`);
+      }
+      return await read(response);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`Timed out after ${this.fetchTimeoutMs} ms fetching ${what}: ${url}`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** Lazy and single-flight; a failed fetch is retried on the next call. */
   private getManifest(): Promise<CircuitsManifest> {
     this.manifestPromise ??= (async () => {
       const url = `${this.baseUrl}/manifest.json`;
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch circuits manifest: ${url} (${response.status})`);
-      }
-      return (await response.json()) as CircuitsManifest;
+      return this.download(
+        url,
+        'circuits manifest',
+        async response => (await response.json()) as CircuitsManifest
+      );
     })().catch(error => {
       this.manifestPromise = null;
       throw error;
@@ -123,11 +162,12 @@ export class WebArtifactProvider implements ArtifactProvider {
       );
     }
     const url = `${this.baseUrl}/${entry.file}`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch circuit artifact: ${url} (${response.status})`);
-    }
-    return verifySha256(new Uint8Array(await response.arrayBuffer()), expected, url);
+    const bytes = await this.download(
+      url,
+      'circuit artifact',
+      async response => new Uint8Array(await response.arrayBuffer())
+    );
+    return verifySha256(bytes, expected, url);
   }
 }
 

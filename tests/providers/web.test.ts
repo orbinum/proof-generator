@@ -6,7 +6,7 @@
  * vk_hash and every sha256 come from the build-time pins, never the manifest.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -573,5 +573,73 @@ describe('WebArtifactProvider — build-time pins', () => {
         new WebArtifactProvider().getResolvedVersion(CircuitType.Unshield)
       ).rejects.toThrow(/does not match the pinned|not pinned/);
     });
+  });
+});
+
+// ─── Download deadline ────────────────────────────────────────────────────────
+
+describe('WebArtifactProvider — download deadline', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  /** Never settles on its own; rejects only when the caller's signal aborts, as a real fetch does. */
+  const stall = (_url: string, init?: RequestInit) =>
+    new Promise<never>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () =>
+        reject(new DOMException('The operation was aborted.', 'AbortError'))
+      );
+    });
+
+  const manifestResponse = () => ({ ok: true, json: async () => buildMockManifest() });
+
+  it('rejects a manifest fetch that never answers', async () => {
+    vi.stubGlobal('fetch', vi.fn(stall));
+
+    const pending = web({ fetchTimeoutMs: 1_000 }).getCircuitWasm(CircuitType.Unshield);
+    const assertion = expect(pending).rejects.toThrow(
+      /Timed out after 1000 ms fetching circuits manifest/
+    );
+    await vi.advanceTimersByTimeAsync(1_000);
+    await assertion;
+  });
+
+  it('does not cache a stalled manifest fetch: the next call retries', async () => {
+    const fetchMock = vi.fn().mockImplementationOnce(stall).mockResolvedValue(manifestResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = web({ fetchTimeoutMs: 1_000 });
+
+    const first = provider.getResolvedVersion(CircuitType.Unshield);
+    const firstAssertion = expect(first).rejects.toThrow(/Timed out/);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await firstAssertion;
+
+    await expect(provider.getResolvedVersion(CircuitType.Unshield)).resolves.toMatchObject({
+      vkHash: '0x73401aa0',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects an artifact whose body stalls after the headers arrived', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(manifestResponse())
+      .mockImplementationOnce(async (url: string, init?: RequestInit) => ({
+        ok: true,
+        arrayBuffer: () => stall(url, init),
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = web({ fetchTimeoutMs: 1_000 }).getCircuitWasm(CircuitType.Unshield);
+    const assertion = expect(pending).rejects.toThrow(
+      /Timed out after 1000 ms fetching circuit artifact/
+    );
+    await vi.advanceTimersByTimeAsync(1_000);
+    await assertion;
   });
 });
